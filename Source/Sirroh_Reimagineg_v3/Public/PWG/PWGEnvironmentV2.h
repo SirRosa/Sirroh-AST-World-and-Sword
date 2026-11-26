@@ -248,6 +248,10 @@ struct FPWGVisualProfile
             P.BackgroundTint=FLinearColor::White; P.AtmosphereColor=FLinearColor(.35f,.36f,.42f,1.f);
             P.GameplayBrightness=1.f; P.GameplayContrast=1.f; P.GameplayTint=FLinearColor::White; P.ForegroundDarkness=.40f;
             P.DepthBrightness=1.f; P.DepthContrast=1.f; P.DepthFog=0.f; P.DepthTintStrength=0.f;
+            P.CaveNear=FPWGCavePlanGrade(1.f,1.f,1.f,0.f,.90f,FLinearColor::White);
+            P.CaveMid=FPWGCavePlanGrade(.48f,1.f,1.f,0.f,.48f,FLinearColor::White);
+            P.CaveFar=FPWGCavePlanGrade(.20f,1.f,1.f,0.f,.16f,FLinearColor::White);
+            P.CaveClosure=FPWGCavePlanGrade(.10f,1.f,1.f,0.f,.025f,FLinearColor::White);
         }
         else if(Index==2)
         {
@@ -261,7 +265,11 @@ struct FPWGVisualProfile
         {
             P.bCaveReference=true; P.bUseReliefCheckpoint=false;
             P.AtmosphereColor=FLinearColor(.33f,.47f,.55f,1.f);
-            P.BackgroundAmbient=.12f; P.FogStrength=.7f;
+            P.BackgroundAmbient=.095f; P.FogStrength=.56f;
+            P.CaveNear=FPWGCavePlanGrade(.70f,1.12f,.78f,.13f,.98f,FLinearColor(.76f,.84f,.90f,1));
+            P.CaveMid=FPWGCavePlanGrade(.94f,1.02f,.55f,.39f,.70f,FLinearColor(.84f,.91f,1.f,1));
+            P.CaveFar=FPWGCavePlanGrade(1.13f,.92f,.30f,.73f,.25f,FLinearColor(.93f,.98f,1.f,1));
+            P.CaveClosure=FPWGCavePlanGrade(1.30f,.90f,.12f,.95f,.025f,FLinearColor::White);
         }
         return P;
     }
