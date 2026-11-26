@@ -218,6 +218,8 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="0",ClampMax="3"))
     int32 CaveMaterialDebug=0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bCaveHybridFormations=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bUseReliefCheckpoint=false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="5.0",ClampMax="50.0",Units="m"))
     float CaveVisualDepthMetres=22.f;

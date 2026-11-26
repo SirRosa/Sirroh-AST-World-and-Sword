@@ -36,6 +36,17 @@ bool FPWGIndependentCaveTest::RunTest(const FString&)
         for(const FVector& N:A.N){bPlane|=FMath::Abs(N.Y)>.9;bSlope|=FMath::Abs(N.Y)<.7;}
         TestTrue(TEXT("Planar and bevel faces coexist"),bPlane && bSlope);
     }
+    {
+        FPWGv2MeshBuffers A[4],B[4]; TArray<PWGIndependentCave::FHybridInstance> X,Y;
+        PWGIndependentCave::Build(A,123,0,0,800,1520,400,900,5000,165,2200,PWGIndependentCave::FRecipe(),&X);
+        PWGIndependentCave::Build(B,123,0,0,800,1520,400,900,5000,165,2200,PWGIndependentCave::FRecipe(),&Y);
+        TestTrue(TEXT("Hybrid transform recipe is deterministic"),!X.IsEmpty() && X==Y);
+        const double Min[3]={0,.23,.51},Max[3]={.23,.51,.80};
+        for(const auto& I:X)
+        {
+            TestTrue(TEXT("Instance recipe stays within depth plan"),(I.Centre.Y-I.Extent.Y-165.)/2200.>=Min[I.Plan] && (I.Centre.Y+I.Extent.Y-165.)/2200.<Max[I.Plan]);
+        }
+    }
     FPWGVisualProfile P=FPWGVisualProfile::DemoPreset(3);
     TestTrue(TEXT("Demo opts into independent scene"),P.bCaveReference && !P.bUseReliefCheckpoint);
     TestTrue(TEXT("Texture detail attenuates"),P.CaveNear.TextureIntensity>P.CaveMid.TextureIntensity && P.CaveMid.TextureIntensity>P.CaveFar.TextureIntensity && P.CaveFar.TextureIntensity>P.CaveClosure.TextureIntensity);

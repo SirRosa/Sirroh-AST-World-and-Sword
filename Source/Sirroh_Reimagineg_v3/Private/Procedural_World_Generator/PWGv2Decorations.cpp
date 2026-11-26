@@ -295,7 +295,9 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
 UMaterialInstanceDynamic* APWGv2Generator::CreateCaveReferenceMaterial(int32 Layer)
 {
     if (!WorldData || !WorldData->Layers.IsValidIndex(Layer-1)) return nullptr;
-    auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_StratifiedCaveRock.M_PWGv2_StratifiedCaveRock"));
+    auto* Base=LoadObject<UMaterialInterface>(nullptr,bCaveReferenceHybrid?
+        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_HybridCaveRock.M_PWGv2_HybridCaveRock"):
+        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_StratifiedCaveRock.M_PWGv2_StratifiedCaveRock"));
     if (!Base) return nullptr;
     return UMaterialInstanceDynamic::Create(Base,this);
 }
