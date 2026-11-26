@@ -77,6 +77,30 @@ enum class EPWGVisualMode : uint8
     Underground_Stylized
 };
 
+// Display-referred per-plane atmosphere; texture intensity is applied in the lit rock material.
+USTRUCT(BlueprintType)
+struct FPWGCavePlanGrade
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan", meta=(ClampMin="0.0",ClampMax="3.0"))
+    float Brightness=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan", meta=(ClampMin="0.4",ClampMax="2.5"))
+    float Contrast=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan", meta=(ClampMin="0.0",ClampMax="1.0"))
+    float Saturation=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan", meta=(ClampMin="0.0",ClampMax="1.0"))
+    float Haze=.5f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan", meta=(ClampMin="0.0",ClampMax="1.0"))
+    float TextureIntensity=.5f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Cave Plan")
+    FLinearColor Tint=FLinearColor::White;
+    FPWGCavePlanGrade()=default;
+    FPWGCavePlanGrade(float B,float C,float S,float H,float T,FLinearColor Color):
+        Brightness(B),Contrast(C),Saturation(S),Haze(H),TextureIntensity(T),Tint(Color) {}
+    bool operator==(const FPWGCavePlanGrade& O) const
+    {return Brightness==O.Brightness && Contrast==O.Contrast && Saturation==O.Saturation && Haze==O.Haze && TextureIntensity==O.TextureIntensity && Tint==O.Tint;}
+};
+
 /** Rendering-only settings, never part of FPWGv2WorldRow or a world save. */
 USTRUCT(BlueprintType)
 struct FPWGVisualProfile
@@ -187,6 +211,32 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
     bool bVisualizeDepthLayers = false;
 
+    // Opt-in, pinned reference fragment only; no world-wide rollout yet.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bCaveReference=false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bUseReliefCheckpoint=false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="5.0",ClampMax="50.0",Units="m"))
+    float CaveVisualDepthMetres=22.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bShowCaveNear=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bShowCaveMid=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bShowCaveFar=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bShowCaveClosure=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    FPWGCavePlanGrade CaveNear=FPWGCavePlanGrade(.53f,1.32f,.72f,.24f,.90f,FLinearColor(.72f,.83f,.92f,1));
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    FPWGCavePlanGrade CaveMid=FPWGCavePlanGrade(.85f,1.08f,.55f,.56f,.48f,FLinearColor(.84f,.91f,1.f,1));
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    FPWGCavePlanGrade CaveFar=FPWGCavePlanGrade(1.14f,.88f,.30f,.83f,.16f,FLinearColor(.93f,.98f,1.f,1));
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    FPWGCavePlanGrade CaveClosure=FPWGCavePlanGrade(1.37f,.80f,.12f,.98f,.025f,FLinearColor::White);
+    const FPWGCavePlanGrade& CaveGrade(int32 I) const
+    {return I==0?CaveNear:I==1?CaveMid:I==2?CaveFar:CaveClosure;}
+
     // Artistic lift is never applied to gameplay geometry. Character/items remain ungraded.
     static FPWGVisualProfile DemoPreset(int32 Index)
     {
@@ -206,6 +256,12 @@ struct FPWGVisualProfile
             P.Desaturation=.45f; P.FogStrength=.30f; P.ForegroundTint=FLinearColor(.82f,.69f,.56f,1.f);
             P.GameplayTint=FLinearColor(1.f,.88f,.72f,1.f); P.GameplayBrightness=1.15f;
             P.DepthTint=FLinearColor(1.f,.77f,.55f,1.f);
+        }
+        else if(Index==3)
+        {
+            P.bCaveReference=true; P.bUseReliefCheckpoint=false;
+            P.AtmosphereColor=FLinearColor(.33f,.47f,.55f,1.f);
+            P.BackgroundAmbient=.12f; P.FogStrength=.7f;
         }
         return P;
     }
@@ -262,6 +318,18 @@ struct FPWGVisualProfile
         Out.DepthFog = Safe(DepthFog,Defaults.DepthFog,0.f,1.f);
         Out.DepthTint = Color(DepthTint,Defaults.DepthTint);
         Out.DepthFormationCount = FMath::Clamp(DepthFormationCount,0,2);
+        Out.CaveVisualDepthMetres=Safe(CaveVisualDepthMetres,Defaults.CaveVisualDepthMetres,5.f,50.f);
+        auto Grade=[&](FPWGCavePlanGrade& V,const FPWGCavePlanGrade& D)
+        {
+            V.Brightness=Safe(V.Brightness,D.Brightness,0.f,3.f);
+            V.Contrast=Safe(V.Contrast,D.Contrast,.4f,2.5f);
+            V.Saturation=Safe(V.Saturation,D.Saturation,0.f,1.f);
+            V.Haze=Safe(V.Haze,D.Haze,0.f,1.f);
+            V.TextureIntensity=Safe(V.TextureIntensity,D.TextureIntensity,0.f,1.f);
+            V.Tint=Color(V.Tint,D.Tint);
+        };
+        Grade(Out.CaveNear,Defaults.CaveNear); Grade(Out.CaveMid,Defaults.CaveMid);
+        Grade(Out.CaveFar,Defaults.CaveFar); Grade(Out.CaveClosure,Defaults.CaveClosure);
         return Out;
     }
 
@@ -292,7 +360,8 @@ struct FPWGVisualProfile
             && bCompareStage1 == Other.bCompareStage1 && bEnableDepthGrading == Other.bEnableDepthGrading && DepthStart == Other.DepthStart && DepthRange == Other.DepthRange
             && DepthBrightness == Other.DepthBrightness && DepthContrast == Other.DepthContrast
             && DepthDesaturation == Other.DepthDesaturation && DepthTintStrength == Other.DepthTintStrength
-            && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers;
+            && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers
+            && CaveNear==Other.CaveNear && CaveMid==Other.CaveMid && CaveFar==Other.CaveFar && CaveClosure==Other.CaveClosure;
     }
 };
 
@@ -550,6 +619,9 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ActiveDepthMaterial;
     bool bTriedStylizedDepthAsset = false;
     bool bHasDepthPrototypeAsset = false;
+    bool bHasIndependentCaveAsset=false;
+    bool bLastCaveReferenceActive=false;
+    float LastCaveStart=-1.f, LastCaveDepth=-1.f;
     float LastDepthLayerSpan=-1.f;
     bool bLastDepthLayerActive=false;
     bool bProfileUniformsInitialized = false;

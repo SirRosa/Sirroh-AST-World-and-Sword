@@ -428,8 +428,8 @@ private:
             Fields->AddSlot().AutoHeight()[SNew(STextBlock).AutoWrapText(true)
                 .Text_Lambda([E]{return SirrohDebug::Text(E.IsValid()?E->GetVisualProfileStatus():TEXT("Brak srodowiska."));})];
             Label(TEXT("Maski: cyjan = tlo, zolty = powierzchnie rozgrywki, magenta = przekroj, zielony = postac/przedmioty/pozostale. Zmiany LIVE."));
-            const TCHAR* Names[]={TEXT("Dark Cave"),TEXT("Atmospheric Cave"),TEXT("Warm Ruins")};
-            for(int32 I=0;I<3;++I)
+            const TCHAR* Names[]={TEXT("Dark Cave"),TEXT("Atmospheric Cave"),TEXT("Warm Ruins"),TEXT("Cave Depth Reference (demo)")};
+            for(int32 I=0;I<4;++I)
                 Fields->AddSlot().AutoHeight().Padding(0,2)[Button(Names[I],[this,E,I]{
                     if(E.IsValid() && CanEdit()){E->ApplyVisualPreset(I);Status=E->GetVisualProfileStatus();RebuildFields();}
                 })];
@@ -458,7 +458,9 @@ private:
             Group(TEXT("Procedural Depth Layers"),{TEXT("bCompareStage1"),TEXT("bEnableDepthGrading"),TEXT("DepthStart"),TEXT("DepthRange"),TEXT("DepthBrightness"),
                 TEXT("DepthContrast"),TEXT("DepthDesaturation"),TEXT("DepthTintStrength"),TEXT("DepthTint"),TEXT("DepthFog"),
                 TEXT("bEnableDepthLayers"),TEXT("DepthFormationCount"),TEXT("bShowDepthNear"),TEXT("bShowDepthMid"),TEXT("bShowDepthBacking"),TEXT("bVisualizeDepthLayers")});
-            Label(TEXT("Stage 1 A/B: przelacz bCompareStage1. Prototyp: stale odleglosci i gestosc, widocznosc LIVE."));
+            Group(TEXT("Independent Cave Reference"),{TEXT("bCaveReference"),TEXT("CaveVisualDepthMetres"),TEXT("bShowCaveNear"),TEXT("bShowCaveMid"),
+                TEXT("bShowCaveFar"),TEXT("bShowCaveClosure"),TEXT("CaveNear"),TEXT("CaveMid"),TEXT("CaveFar"),TEXT("CaveClosure"),TEXT("bUseReliefCheckpoint")});
+            Label(TEXT("Demo przypina fragment do aktualnego kadru pod ziemia. Po odejsciu wraca Stage 1; wylacz/wlacz bCaveReference by wybrac nowy kadr. bCompareStage1 = A/B. Glebokosc przebudowuje tylko scene referencyjna."));
             Group(TEXT("Diagnostyka"),{TEXT("bVisualizeMasks")});
             Label(TEXT("NeutralPadding / FrontRange: pola zgodnosci, nieaktywne w shaderze semantycznym."));
         }

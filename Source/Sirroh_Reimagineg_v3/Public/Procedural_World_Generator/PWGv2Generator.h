@@ -9,6 +9,7 @@ class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
 class APWGEnvironmentV2;
+struct FPWGVisualProfile;
 
 USTRUCT()
 struct FPWGv2DecorationBatch
@@ -41,6 +42,11 @@ public:
     bool HasGlobalDepthAtmosphere() const;
     void SetVisualMaskPassEnabled(bool bEnabled);
     void SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking);
+    void UpdateCaveReference(const FPWGVisualProfile& Profile,bool bAllowed,const FVector& View,float Width,float Height,const FVector& Pawn);
+    void ResetCaveReference();
+    bool IsCaveReferenceActive() const {return bCaveReferenceActive && bUndergroundView;}
+    float GetCaveReferenceStart() const {return CaveReferenceStart;}
+    float GetCaveReferenceDepth() const {return CaveReferenceDepth;}
     bool IsDepthPrototypeActive() const { return bUndergroundView && bDepthPrototypeActive && BackgroundAuditIsolation==0; }
     // Reserved stencil roles for this pass, independent of physical lane.
     static constexpr int32 VisualRear=201;
@@ -174,6 +180,16 @@ private:
     void SyncVisualMasks(int32 Index);
     bool bVisualMaskPassEnabled=false;
     bool bDepthPrototypeActive=false;
+    UPROPERTY(Transient) TObjectPtr<UProceduralMeshComponent> CaveReferenceMesh;
+    UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> CaveReferenceMaterials;
+    FVector CaveReferenceAnchor=FVector::ZeroVector;
+    float CaveReferenceWidth=0.f, CaveReferenceHeight=0.f, CaveReferenceHalfWidth=0.f;
+    float CaveReferenceStart=0.f, CaveReferenceDepth=0.f;
+    bool bCaveReferencePinned=false, bCaveReferenceActive=false;
+    float CaveReferenceTextures[4]={-1.f,-1.f,-1.f,-1.f};
+    UMaterialInstanceDynamic* CreateCaveReferenceMaterial(int32 Layer);
+    bool BuildCaveReference(const FVector& Pawn,float Depth);
+    bool SuppressCaveReferenceOriginal(const FPWGv2DecorationBatch& Batch,int32 Section) const;
     int32 DepthPrototypeFormationCount=2;
     bool bDepthPrototypeNear=true, bDepthPrototypeMid=true, bDepthPrototypeBacking=true;
     bool IsDepthPrototypeSectionVisible(const FPWGv2DecorationBatch& Batch,int32 Section) const;

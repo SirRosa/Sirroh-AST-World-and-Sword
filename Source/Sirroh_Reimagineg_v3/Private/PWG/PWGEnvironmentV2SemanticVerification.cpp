@@ -28,6 +28,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bIsolation=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
     static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
     static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
+    static const bool bCaveQA=FParse::Param(FCommandLine::Get(),TEXT("PWGCaveReferenceQA"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
     auto* G=Cast<APWGv2Generator>(Generator);
     auto* PC=GetWorld()->GetFirstPlayerController();
@@ -38,7 +39,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         UE_LOG(LogTemp,Error,TEXT("VF_RENDER_FAIL %s"),Why);
         VisualProbeStep=-1; FPlatformMisc::RequestExit(false);
     };
-    if(G->WorldName!=(bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
+    if(G->WorldName!=(bCaveQA?TEXT("VF_CaveReference_20261126"):bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
     auto* Mover=Pawn->FindComponentByClass<UMoverComponent>();
     auto* Input=Pawn->FindComponentByClass<UPWGSidescrollerInputComponent>();
     auto FreezePawn=[&](bool bFreeze)
@@ -49,7 +50,9 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     };
     auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
     {
-        VisualProfile=FPWGVisualProfile::DemoPreset(Preset);
+        VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
+        VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
+        if(bCaveQA) VisualProfile.bCaveReference=true;
         VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
         VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
         VisualProfile.bCompareStage1=!bDepthQA || bStage1;
@@ -67,7 +70,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         PC->ConsoleCommand(TEXT("t.MaxFPS 60"));
         G->SetBackgroundAuditIsolation(0);
         ++VisualProbeScene;
-        if(VisualProbeScene>(bIsolation||bEnclosed?3:6))
+        if(bCaveQA || VisualProbeScene>(bIsolation||bEnclosed?3:6))
         {
             UE_LOG(LogTemp,Display,TEXT("VF_RENDER_COMPLETE all requested scene sequences"));
             VisualProbeStep=-1; FPlatformMisc::RequestExit(false); return;
@@ -129,9 +132,10 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             (!StylizedDepthMaterial || ActiveDepthMaterial!=StylizedDepthMaterial || ProfileMix<.999f))
         {Fail(TEXT("semantic material not active"));return false;}
         if(bDepthQA && !bHasDepthPrototypeAsset){Fail(TEXT("Depth prototype asset not loaded"));return false;}
-        if(bDepthQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
+        if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
+        if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?TEXT("ChatGPT/IndependentCaveReference_20261126/Render"):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -199,10 +203,11 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             break;
         }
         case 3: SetPreset(1);break;
-        case 4: if(!Capture(bDepthQA?TEXT("Stage2"):TEXT("Atmospheric")))return;break;
+        case 4: if(!Capture(bCaveQA?TEXT("Composition"):bDepthQA?TEXT("Stage2"):TEXT("Atmospheric")))return;break;
         case 5: SetPreset(1,true);break;
         case 6: if(!Capture(bDepthQA?TEXT("DepthMasks"):TEXT("Masks")))return;break;
         case 7:
+            if(bCaveQA){SetPreset(1);VisualProfile.bShowCaveMid=false;VisualProfile.bShowCaveFar=false;VisualProfile.bShowCaveClosure=false;RefreshVisualProfile();Advance(40);return;}
             if(bIsolation)
             {
                 SetPreset(1);G->SetBackgroundAuditIsolation(1);Advance(30);return;
@@ -257,7 +262,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             Advance(20);return;
         case 24:
         {
-            if(VisualProbeScene!=0){NextScene();return;}
+            if(bCaveQA || VisualProbeScene!=0){NextScene();return;}
             // Exercise the existing normal lane move producer, not a replacement collision path.
             FreezePawn(false);EPWGTerrainLane TargetLane;FVector Destination;
             if(Input && G->FindLaneSwitchDestination(Pawn->GetActorLocation(),-1,TargetLane,Destination))
@@ -280,6 +285,16 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         case 37: G->SetBackgroundAuditIsolation(5);break;
         case 38: if(!Capture(TEXT("NativeOnly")))return;break;
         case 39: NextScene();return;
+        case 40: if(!Capture(TEXT("NearOnly")))return;break;
+        case 41: SetPreset(1);VisualProfile.bShowCaveNear=false;VisualProfile.bShowCaveFar=false;VisualProfile.bShowCaveClosure=false;RefreshVisualProfile();break;
+        case 42: if(!Capture(TEXT("MidOnly")))return;break;
+        case 43: SetPreset(1);VisualProfile.bShowCaveNear=false;VisualProfile.bShowCaveMid=false;VisualProfile.bShowCaveClosure=false;RefreshVisualProfile();break;
+        case 44: if(!Capture(TEXT("FarOnly")))return;break;
+        case 45: SetPreset(1);VisualProfile.bShowCaveNear=false;VisualProfile.bShowCaveMid=false;VisualProfile.bShowCaveFar=false;RefreshVisualProfile();break;
+        case 46: if(!Capture(TEXT("ClosureOnly")))return;break;
+        case 47: SetPreset(0);break;
+        case 48: if(!Capture(TEXT("Dark")))return;break;
+        case 49: SetPreset(1);PC->ConsoleCommand(TEXT("t.MaxFPS 0"));Advance(20);return;
         case 25:
             UE_LOG(LogTemp,Display,TEXT("VF_LANE_RESULT targetY=%.2f actualY=%.2f active=%d reached=%d"),
                 VisualProbeLaneY,Pawn->GetActorLocation().Y,Input?Input->IsLaneMoveActive():false,FMath::Abs(VisualProbeLaneY-Pawn->GetActorLocation().Y)<5.f);

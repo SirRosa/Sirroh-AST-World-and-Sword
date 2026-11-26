@@ -36,6 +36,7 @@ FString APWGv2Generator::SlotName() const
 bool APWGv2Generator::GenerateWorld(FName)
 {
     SetActorTickEnabled(false);
+    ResetCaveReference();
     PendingSurfaceCollision.Reset(); PendingUndergroundCollision.Reset();
     // A reload of this generator must not copy a visual override from the saved plan.
     const FPWGVisualProfile PreviousVisualProfile=IsValid(EnvironmentV2)?EnvironmentV2->VisualProfile:FPWGVisualProfile();

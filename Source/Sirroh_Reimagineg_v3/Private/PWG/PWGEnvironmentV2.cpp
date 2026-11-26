@@ -1004,9 +1004,9 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
     const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
-    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient | Depth prototype asset: %s"),
+    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient | Depth prototype asset: %s | Cave reference: %s"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
-        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,bHasDepthPrototypeAsset?TEXT("loaded"):TEXT("not loaded"));
+        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,bHasDepthPrototypeAsset?TEXT("loaded"):TEXT("not loaded"),bLastCaveReferenceActive?TEXT("active"):bHasIndependentCaveAsset?TEXT("available"):TEXT("not loaded"));
 }
 
 void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
@@ -1023,6 +1023,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     if (bWantsV2 && !bTriedStylizedDepthAsset)
     {
         bTriedStylizedDepthAsset=true;
+        if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_CaveReference.M_PWGv2_DepthAtmosphere_CaveReference")))
+        {
+            StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+            bHasIndependentCaveAsset=IsValid(StylizedDepthMaterial);
+            bHasDepthPrototypeAsset=bHasIndependentCaveAsset;
+        }
+        if (!StylizedDepthMaterial)
         if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
             TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_DepthLayersPrototype.M_PWGv2_DepthAtmosphere_DepthLayersPrototype")))
         {
@@ -1046,7 +1054,12 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
 #else
     WorldGenerator->SetVisualMaskPassEnabled(bV2);
 #endif
-    WorldGenerator->SetDepthPrototypePresentation(bV2 && bHasDepthPrototypeAsset && Profile.bEnableDepthLayers && !Profile.bCompareStage1,
+    FVector RefView; FRotator RefRotation; float RefW=0,RefH=0;
+    const bool bReferenceView=GetView(RefView,RefRotation,RefW,RefH);
+    const APawn* RefPawn=UGameplayStatics::GetPlayerPawn(this,0);
+    WorldGenerator->UpdateCaveReference(Profile,bV2 && bHasIndependentCaveAsset && bReferenceView && RefPawn && !Profile.bCompareStage1,
+        RefView,RefW,RefH,RefPawn?RefPawn->GetActorLocation():FVector::ZeroVector);
+    WorldGenerator->SetDepthPrototypePresentation(bV2 && bHasDepthPrototypeAsset && Profile.bUseReliefCheckpoint && !Profile.bCaveReference && Profile.bEnableDepthLayers && !Profile.bCompareStage1,
         Profile.DepthFormationCount,Profile.bShowDepthNear,Profile.bShowDepthMid,Profile.bShowDepthBacking);
     UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
     if (ActiveDepthMaterial.Get()!=Material)
@@ -1125,7 +1138,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             Scalar(TEXT("ProfileVisualizeMasks"),Profile.bVisualizeMasks?1.f:0.f);
             if (bHasDepthPrototypeAsset)
             {
-                Scalar(TEXT("DepthGradeEnabled"),Profile.bEnableDepthGrading && !Profile.bCompareStage1?1.f:0.f);
+                Scalar(TEXT("DepthGradeEnabled"),Profile.bUseReliefCheckpoint && Profile.bEnableDepthGrading && !Profile.bCompareStage1?1.f:0.f);
                 Scalar(TEXT("DepthGradeStart"),Profile.DepthStart);
                 Scalar(TEXT("DepthGradeRange"),Profile.DepthRange);
                 Scalar(TEXT("DepthGradeBrightness"),Profile.DepthBrightness);
@@ -1136,6 +1149,13 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
                 Material->SetVectorParameterValue(TEXT("DepthGradeTint"),Profile.DepthTint);
                 Scalar(TEXT("DepthLayerDebug"),Profile.bVisualizeDepthLayers && !Profile.bCompareStage1?1.f:0.f);
             }
+            if (bHasIndependentCaveAsset)
+                for(int32 I=0;I<4;++I)
+                {
+                    const auto& G=Profile.CaveGrade(I);
+                    Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveGrade%d"),I),FLinearColor(G.Brightness,G.Contrast,G.Saturation,G.Haze));
+                    Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveTint%d"),I),G.Tint);
+                }
             LastProfileUniforms=Profile;
             LastProfileOrigin=ProfileOrigin;
             LastProfileNeutralWidth=Neutral;
@@ -1150,6 +1170,15 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             if (!bProfileUniformsInitialized || bActive!=bLastDepthLayerActive)
                 Scalar(TEXT("DepthLayerActive"),bActive?1.f:0.f);
             LastDepthLayerSpan=Span; bLastDepthLayerActive=bActive;
+        }
+        if (bHasIndependentCaveAsset)
+        {
+            const bool bRef=WorldGenerator->IsCaveReferenceActive();
+            const float Start=WorldGenerator->GetCaveReferenceStart(), Depth=WorldGenerator->GetCaveReferenceDepth();
+            if(!bProfileUniformsInitialized || bRef!=bLastCaveReferenceActive) Scalar(TEXT("CaveReferenceActive"),bRef?1.f:0.f);
+            if(!bProfileUniformsInitialized || Start!=LastCaveStart) Scalar(TEXT("CaveReferenceStart"),Start);
+            if(!bProfileUniformsInitialized || Depth!=LastCaveDepth) Scalar(TEXT("CaveReferenceDepth"),Depth);
+            bLastCaveReferenceActive=bRef; LastCaveStart=Start; LastCaveDepth=Depth;
         }
         const float NextMix=Profile.BlendSeconds<=KINDA_SMALL_NUMBER?1.f:
             FMath::FInterpConstantTo(ProfileMix,1.f,GetWorld()->GetDeltaSeconds(),1.f/Profile.BlendSeconds);

@@ -292,6 +292,21 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
     }
 }
 
+UMaterialInstanceDynamic* APWGv2Generator::CreateCaveReferenceMaterial(int32 Layer)
+{
+    if (!WorldData || !WorldData->Layers.IsValidIndex(Layer-1)) return nullptr;
+    const auto& L=WorldData->Layers[Layer-1];
+    const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(L.WallTexture,TEXT("Reference cave rock"),false):nullptr;
+    FPWGv2AtlasPart Texture=L.Atlas;
+    FLinearColor Tint=L.WallTint;
+    if (Row) {Texture=FPWGv2AtlasPart();Texture.Texture=Row->Texture;Tint*=Row->Tint*Row->Brightness;}
+    auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_CaveReferenceRock.M_PWGv2_CaveReferenceRock"));
+    if (!Base) return nullptr;
+    auto* M=UMaterialInstanceDynamic::Create(Base,this);
+    SetAtlas(M,Texture,TEXT("")); M->SetVectorParameterValue(TEXT("Tint"),Tint);
+    return M;
+}
+
 void APWGv2Generator::SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking)
 {
     FormationCount=FMath::Clamp(FormationCount,0,2);
@@ -305,6 +320,7 @@ void APWGv2Generator::SetDepthPrototypePresentation(bool bEnabled,int32 Formatio
 
 bool APWGv2Generator::IsDepthPrototypeSectionVisible(const FPWGv2DecorationBatch& Batch,int32 Section) const
 {
+    if (SuppressCaveReferenceOriginal(Batch,Section)) return false;
     const bool bActive=IsDepthPrototypeActive();
     if (const int32* Plan=Batch.DepthPrototypePlans.Find(Section))
     {
