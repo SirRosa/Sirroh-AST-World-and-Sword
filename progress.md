@@ -56,5 +56,9 @@ Wdrożenie: pierwsze polecenie przekroczyło limit Windows przed uruchomieniem; 
 Użytkownik odrzucił V1 wizualnie (A/B screenshoty, chronione +/-260 cm, mix 1). Backup d07e745fd5a35cbb586a48c379574b2c38f42b3d na backup/visual-foundation-before-semantic-20261126. Main nietknięty.
 - [x] Kod: domyślny Underground_Stylized; Legacy nadal dostępne, powierzchnia Legacy. Sekcje tylne 5–9,13–16,33+ oraz maska przekroju 29–32 otrzymują osobne stencil-only proxies 201/202, bez kolizji/cieni/main-pass, z kontrolą widoczności/cullingu i lifecycle chunków. Nie klasyfikujemy geometrii z Y. SolidEarth i pozostałe obiekty nie otrzymują ambient lift. Projekt już ma r.CustomDepth=3; 254 jest używane przez gracza, nie ruszamy go.
 - [x] Kod/shader: rzeczywisty gain/contrast, lokalny ambient floor wyłącznie na widocznej ścianie, osobne tint i atmosfera, ochrona jasnych pikseli, gameplay gain/contrast domyślnie neutralne, diagnostyka cyan/magenta/green. Parametry w F7; demo domyślnie. Ambient można wyłączyć. Nie zmieniamy fizycznego światła ani cieni; floor jest artystyczną korektą po tonemap, nie symulacją światła. Proxy obejmują sekcje PWG, nie wszystkie natywne aktory POI.
-- [ ] Lokalny asset/kompilacja/regresja. 
+- [x] Lokalny asset i kompilacja: authoring i staging PASS; build 1 EXIT=6 (C2487, C4458), poprawki f80b083/c696188, build 2 EXIT=0. Stary asset i save zabezpieczone. Nowy SHA256 D736F40A523F9DB74F43F5B12C3C6AC8B4332B0A38E6433922C1698064DC8F34.
+- [ ] Regresje po build 2; real render QA. 
 - [ ] Rzeczywisty render A/B tej samej kamery i geometrii bez/z realną pochodnią, maski, ocena screenshotów i wydajności. Bez tego nie uznajemy etapu za zaakceptowany.
+
+- Test renderowania przygotowany w 5712a39: kopia asd jako VF_SemanticProbe_20261126, real RHI, stała kamera, porównanie bez pochodni oraz z BP_AST_Torch i zatrzymanym tickiem jej komponentów. Loguje kamerę i źródła point light; brak zatwierdzenia do czasu odczytu rzeczywistych PNG.
+- Logi iteracji: https://drive.google.com/drive/folders/1JwIbANeDUzAwUxo-KC9h5rSparVHxxiV .
