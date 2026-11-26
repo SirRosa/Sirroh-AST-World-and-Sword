@@ -1006,6 +1006,8 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
 {
     const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
+    if (const auto* G=Cast<APWGv2Generator>(Generator); G && G->IsPixelBackgroundActive())
+        return FString::Printf(TEXT("Procedural Pixel 2D (global), %d plans + closure; ambient %.2f lux"),VisualProfile.PixelPlanCount,VisualProfile.bDisableBackgroundAmbient?0.f:VisualProfile.PixelAmbientLux);
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
     return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient | Depth prototype asset: %s | Cave reference: %s"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),

@@ -6,6 +6,7 @@
 #include "Items/SirrohCarryProps.h"
 #include "ASTFireReactiveComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/LightComponentBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Pawn.h"
@@ -27,6 +28,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bRequested=FParse::Param(FCommandLine::Get(),TEXT("PWGVisualPOIQA"));
     static const bool bIsolation=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
     static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
+    static const bool bPixelQA=FParse::Param(FCommandLine::Get(),TEXT("PWGPixel2DQA"));
     static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
     static const bool bCaveQA=FParse::Param(FCommandLine::Get(),TEXT("PWGCaveReferenceQA"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
@@ -41,7 +43,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         UE_LOG(LogTemp,Error,TEXT("VF_RENDER_FAIL %s"),Why);
         VisualProbeStep=-1; FPlatformMisc::RequestExit(false);
     };
-    if(G->WorldName!=(bCaveQA?TEXT("VF_CaveReference_20261126"):bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
+    if(G->WorldName!=(bPixelQA?TEXT("VF_Pixel2D_20261126"):bCaveQA?TEXT("VF_CaveReference_20261126"):bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
     auto* Mover=Pawn->FindComponentByClass<UMoverComponent>();
     auto* Input=Pawn->FindComponentByClass<UPWGSidescrollerInputComponent>();
     auto FreezePawn=[&](bool bFreeze)
@@ -57,7 +59,12 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(bCaveQA){VisualProfile.bCaveReference=true; VisualProfile.bCaveGeological=bGeoQA; if(bGeoQA)VisualProfile.CaveVisualDepthMetres=30.f; else if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
         VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
         VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
-        VisualProfile.bCompareStage1=!bDepthQA || bStage1;
+        VisualProfile.bCompareStage1=bPixelQA?bStage1:(!bDepthQA || bStage1);
+        if(bPixelQA)
+        {
+            VisualProfile.bProceduralPixel=true;VisualProfile.bUseReliefCheckpoint=false;VisualProfile.bCaveReference=false;
+            VisualProfile.bVisualizeDepthLayers=bMasks;VisualProfile.bVisualizeMasks=false;
+        }
         if(bLegacy)VisualProfile.Mode=EPWGVisualMode::Legacy;
         RefreshVisualProfile();
     };
@@ -71,7 +78,9 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         bVisualProbeDisableMaskPass=false;
         PC->ConsoleCommand(TEXT("t.MaxFPS 60"));
         G->SetBackgroundAuditIsolation(0);
-        if(bCaveQA)
+        if(bPixelQA)
+            VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?8:9;
+        else if(bCaveQA)
         {
             VisualProfile.bCaveReference=false; RefreshVisualProfile();
             G->ResetCaveReference();
@@ -79,7 +88,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             VisualProbeScene=bGeoQA?9:VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?7:VisualProbeScene==7?8:9;
         }
         else ++VisualProbeScene;
-        if((bCaveQA && VisualProbeScene>8) || (!bCaveQA && VisualProbeScene>(bIsolation||bEnclosed?3:6)))
+        if((bPixelQA && VisualProbeScene>8) || (!bPixelQA && ((bCaveQA && VisualProbeScene>8) || (!bCaveQA && VisualProbeScene>(bIsolation||bEnclosed?3:6)))))
         {
             UE_LOG(LogTemp,Display,TEXT("VF_RENDER_COMPLETE all requested scene sequences"));
             VisualProbeStep=-1; FPlatformMisc::RequestExit(false); return;
@@ -140,11 +149,12 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(VisualProfile.Mode==EPWGVisualMode::Underground_Stylized &&
             (!StylizedDepthMaterial || ActiveDepthMaterial!=StylizedDepthMaterial || ProfileMix<.999f))
         {Fail(TEXT("semantic material not active"));return false;}
+        if(bPixelQA && (!bHasPixelBackgroundAsset || !G->IsPixelBackgroundActive())){Fail(TEXT("global Pixel2D not active"));return false;}
         if(bDepthQA && !bHasDepthPrototypeAsset){Fail(TEXT("Depth prototype asset not loaded"));return false;}
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -199,7 +209,19 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             float W=0,H=0;FVector P;FRotator R;
             if(GetView(P,R,W,H))
                 G->UpdateGameplayView(FTransform(FRotator(0,90,0),VisualProbeFocus+FVector(0,-1840,0)),W,W/FMath::Max(H,1.f));
-            SetPreset(1,false,!bDepthQA,bDepthQA);
+            if(bPixelQA)
+            {
+                // In the disposable QA world only, isolate the existing physical
+                // fill from unrelated scene lights. The actual torch is spawned later.
+                for(TActorIterator<AActor> It(GetWorld());It;++It)
+                    if(*It!=this)
+                    {
+                        TArray<ULightComponentBase*> Lights;It->GetComponents<ULightComponentBase>(Lights);
+                        for(auto* L:Lights)if(L)L->SetVisibility(false,true);
+                    }
+                SetPreset(1,false,false,true);
+            }
+            else SetPreset(1,false,!bDepthQA,bDepthQA);
             break;
         }
         case 2:
@@ -208,14 +230,26 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             // Recompute culling for the actual settled, locked view (not the old follow target).
             G->UpdateGameplayView(FTransform(VisualProbeRotation,VisualProbeCamera),VisualProbeWidth,VisualProbeWidth/FMath::Max(H,1.f));
             VisualProbePawn=Pawn->GetActorLocation();
+            if(bPixelQA)
+            {
+                if(G->IsPixelBackgroundActive()){Fail(TEXT("Stage 1 toggle failed"));return;}
+                SetPreset(1);Advance(4);return;
+            }
             if(!Capture(bDepthQA?TEXT("Stage1"):TEXT("Legacy")))return;
             break;
         }
         case 3: SetPreset(1);break;
-        case 4: if(!Capture(bCaveQA?TEXT("Composition"):bDepthQA?TEXT("Stage2"):TEXT("Atmospheric")))return;break;
+        case 4:
+            if(bPixelQA)
+            {
+                if(!Capture(TEXT("Composition")))return;
+                Advance(VisualProbeScene==0?7:70);return;
+            }
+            if(!Capture(bCaveQA?TEXT("Composition"):bDepthQA?TEXT("Stage2"):TEXT("Atmospheric")))return;break;
         case 5: SetPreset(1,true);break;
         case 6: if(!Capture(bDepthQA?TEXT("DepthMasks"):TEXT("Masks")))return;break;
         case 7:
+            if(bPixelQA){SetPreset(0);break;}
             if(bGeoQA){SetPreset(1);VisualProfile.CaveTextureAmbient=0.f;RefreshVisualProfile();Advance(60);return;}
             if(bCaveQA){SetPreset(1);VisualProfile.bShowCaveMid=false;VisualProfile.bShowCaveFar=false;VisualProfile.bShowCaveClosure=false;RefreshVisualProfile();Advance(40);return;}
             if(bIsolation)
@@ -224,7 +258,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             }
             if(bEnclosed || (VisualProbeScene!=0 && VisualProbeScene!=2)) {NextScene();return;}
             SetPreset(0);break;
-        case 8: if(!Capture(TEXT("Dark")))return;break;
+        case 8: if(!Capture(TEXT("Dark")))return;if(bPixelQA){Advance(11);return;}break;
         case 9: SetPreset(2);break;
         case 10: if(!Capture(TEXT("Warm")))return;break;
         case 11:
@@ -262,7 +296,8 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             for(UActorComponent* Component:Torch->GetComponents())if(Component)Component->SetComponentTickEnabled(false);
             break;
         }
-        case 13: if(!Capture(TEXT("TorchDark")))return;break;
+        case 13: if(!Capture(TEXT("TorchDark")))return;if(bPixelQA){Advance(70);return;}break;
+        case 70: NextScene();return;
         case 14: if(bGeoQA){NextScene();return;} SetPreset(1);break;
         case 15: if(!Capture(TEXT("TorchAtmospheric")))return;break;
         case 16:

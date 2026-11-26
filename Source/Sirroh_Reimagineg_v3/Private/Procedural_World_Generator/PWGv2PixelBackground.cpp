@@ -137,7 +137,7 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
                 Data[J*W+I]=PWGPixelField::Paint(Columns[Tile.Plan][I],(GX+I+.5)*Cell,Z,Tile.Plan,Seed,S);
         }
         UTexture2D* Tex=UTexture2D::CreateTransient(W,H,PF_B8G8R8A8);
-        if(!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.IsEmpty()) return false;
+        if(!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num()==0) return false;
         Tex->SRGB=false;Tex->NeverStream=true;Tex->Filter=TF_Nearest;
         Tex->AddressX=TA_Clamp;Tex->AddressY=TA_Clamp;
         auto& Mip=Tex->GetPlatformData()->Mips[0];
