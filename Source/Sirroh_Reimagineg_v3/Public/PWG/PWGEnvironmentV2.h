@@ -217,6 +217,8 @@ struct FPWGVisualProfile
     // 0=lit, 1=base color, 2=world normal, 3=UV. Diagnostic only.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="0",ClampMax="3"))
     int32 CaveMaterialDebug=0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="0.0",ClampMax="1.0"))
+    float CaveTextureAmbient=.42f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bCaveHybridFormations=true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
@@ -332,6 +334,7 @@ struct FPWGVisualProfile
         Out.DepthTint = Color(DepthTint,Defaults.DepthTint);
         Out.DepthFormationCount = FMath::Clamp(DepthFormationCount,0,2);
         Out.CaveMaterialDebug=FMath::Clamp(CaveMaterialDebug,0,3);
+        Out.CaveTextureAmbient=Safe(CaveTextureAmbient,Defaults.CaveTextureAmbient,0.f,1.f);
         Out.CaveVisualDepthMetres=Safe(CaveVisualDepthMetres,Defaults.CaveVisualDepthMetres,5.f,50.f);
         auto Grade=[&](FPWGCavePlanGrade& V,const FPWGCavePlanGrade& D)
         {
@@ -375,7 +378,7 @@ struct FPWGVisualProfile
             && DepthBrightness == Other.DepthBrightness && DepthContrast == Other.DepthContrast
             && DepthDesaturation == Other.DepthDesaturation && DepthTintStrength == Other.DepthTintStrength
             && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers
-            && CaveMaterialDebug==Other.CaveMaterialDebug && bCaveReference==Other.bCaveReference && CaveNear==Other.CaveNear && CaveMid==Other.CaveMid && CaveFar==Other.CaveFar && CaveClosure==Other.CaveClosure;
+            && CaveTextureAmbient==Other.CaveTextureAmbient && CaveMaterialDebug==Other.CaveMaterialDebug && bCaveReference==Other.bCaveReference && CaveNear==Other.CaveNear && CaveMid==Other.CaveMid && CaveFar==Other.CaveFar && CaveClosure==Other.CaveClosure;
     }
 };
 

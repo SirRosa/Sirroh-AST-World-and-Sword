@@ -1024,6 +1024,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     {
         bTriedStylizedDepthAsset=true;
         if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_CaveTexturedAmbient.M_PWGv2_DepthAtmosphere_CaveTexturedAmbient")))
+        {
+            StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+            bHasIndependentCaveAsset=IsValid(StylizedDepthMaterial);
+            bHasDepthPrototypeAsset=bHasIndependentCaveAsset;
+        }
+        if (!StylizedDepthMaterial)
+        if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
             TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_CaveReference.M_PWGv2_DepthAtmosphere_CaveReference")))
         {
             StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
@@ -1149,6 +1157,8 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
                 Material->SetVectorParameterValue(TEXT("DepthGradeTint"),Profile.DepthTint);
                 Scalar(TEXT("DepthLayerDebug"),Profile.bVisualizeDepthLayers && !Profile.bCompareStage1?1.f:0.f);
             }
+            if (bHasIndependentCaveAsset)
+                Scalar(TEXT("CaveTextureAmbient"),Profile.CaveTextureAmbient);
             if (bHasIndependentCaveAsset)
                 for(int32 I=0;I<4;++I)
                 {
