@@ -11,6 +11,8 @@
 #include "Misc/Paths.h"
 #include "POI/POIShaft.h"
 #include "POI/POIKitBlock.h"
+#include "POIImageLighting.h"
+#include "Engine/Texture2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Materials/Material.h"
@@ -142,7 +144,43 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                 for (auto* V:Visuals) if (V && V->GetFName()==FName(TEXT("ImageOrBlock")))
                 { ++LitCards; TestTrue(TEXT("Kit background card is Default Lit"),IsLit(V->GetMaterial(0),TEXT("M_KitImageFit_LitBackground"))); }
             }
-            if (Card) Card->Destroy();
+            if (Card)
+            {
+                // Probe actual PNG face assignment, including optional caps and native mesh overrides.
+                auto* Image=LoadObject<UTexture2D>(nullptr,TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+                auto* Original=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit.M_KitImageFit"));
+                TestTrue(TEXT("PNG probe assets exist"),Image && Original);
+                Card->Settings.Kind=EPOIKitKind::AST;
+                Card->Settings.Image=Image; Card->Settings.TopImage=Image; Card->Settings.Material=Original;
+                Card->RefreshAppearance();
+                TArray<UStaticMeshComponent*> Faces; Card->GetComponents<UStaticMeshComponent>(Faces);
+                int32 LitFaces=0;
+                for (auto* Face:Faces) if (Face && (Face->GetFName()==FName(TEXT("ImageOrBlock")) || Face->GetFName()==FName(TEXT("TopImage")) || Face->GetFName()==FName(TEXT("BottomImage"))))
+                {
+                    ++LitFaces;
+                    TestTrue(TEXT("Platform PNG face is Default Lit"),IsLit(Face->GetMaterial(0),TEXT("M_KitImageFit_LitBackground")));
+                }
+                TestEqual(TEXT("All three platform image faces tested"),LitFaces,3);
+                if (Image && Original && Faces.Num()>0)
+                {
+                    auto* Face=Faces[0];
+                    auto* MID=UMaterialInstanceDynamic::Create(Original,Face);
+                    const FLinearColor ExpectedTint(.2f,.4f,.6f,1.f),ExpectedRect(.1f,.2f,.7f,.6f);
+                    MID->SetTextureParameterValue(TEXT("ImageTexture"),Image);
+                    MID->SetVectorParameterValue(TEXT("Tint"),ExpectedTint);
+                    MID->SetVectorParameterValue(TEXT("UVRect"),ExpectedRect);
+                    Face->SetMaterial(0,MID);
+                    TestEqual(TEXT("Native PNG slot converted once"),POIImageLighting::ApplyToActor(Card),1);
+                    auto* Converted=Face->GetMaterial(0);
+                    UTexture* ActualImage=nullptr; FLinearColor ActualTint,ActualRect;
+                    TestTrue(TEXT("Native PNG receives scene lighting"),IsLit(Converted,TEXT("M_KitImageFit_LitBackground")));
+                    TestTrue(TEXT("Native PNG texture preserved"),Converted && Converted->GetTextureParameterValue(FMaterialParameterInfo(FName(TEXT("ImageTexture"))),ActualImage) && ActualImage==Image);
+                    TestTrue(TEXT("Native PNG tint preserved"),Converted && Converted->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("Tint"))),ActualTint) && ActualTint.Equals(ExpectedTint));
+                    TestTrue(TEXT("Native PNG UV rect preserved"),Converted && Converted->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("UVRect"))),ActualRect) && ActualRect.Equals(ExpectedRect));
+                    TestEqual(TEXT("Already lit native PNG not reallocated"),POIImageLighting::ApplyToActor(Card),0);
+                }
+                Card->Destroy();
+            }
             TestTrue(TEXT("Audit contains lit cave and kit backgrounds"),LitCaves>0 && LitCards>0);
             AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d"),LitCaves,LitShafts,LitProjected,LitCards));
             // Check actual foreground geometry, not merely component visibility.
@@ -271,6 +309,8 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                             {
                                 ++Earth;
                                 TestTrue(TEXT("Solid earth remains visible in both domains"),Mesh->IsMeshSectionVisible(S));
+                                TestTrue(TEXT("Solid earth switches material without changing visibility"),Mesh->GetMaterial(S)==G->WallMaterial(S-G->EarthSectionBase+1,false,false,false,bUnderground));
+                                if (bUnderground) TestTrue(TEXT("Exposed earth backing is lit underground"),IsLit(Mesh->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit")));
                             }
                             else if (G->IsSolidCutawaySection(S)) TestTrue(TEXT("Solid foreground only underground"),Mesh->IsMeshSectionVisible(S)==bUnderground);
                             else TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceVisibleUndergroundSection(S)));

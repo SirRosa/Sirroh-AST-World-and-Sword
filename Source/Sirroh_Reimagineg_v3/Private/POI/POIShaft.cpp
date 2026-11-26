@@ -1,4 +1,5 @@
 #include "POI/POIShaft.h"
+#include "POIImageLighting.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/UnrealType.h"
@@ -232,6 +233,7 @@ void APOIShaft::AddSection(const FPOIShaftRow& Section,float Offset)
             Actor->RerunConstructionScripts();
         }
         Actor->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
+        POIImageLighting::ApplyToActor(Actor); // native AST platforms can carry independent PNG mesh slots
         GeneratedNativeActors.Add(Actor); HideLayerActor(Actor);
     }
 }
@@ -393,14 +395,14 @@ void APOIShaft::ApplyLoadedArt()
 {
     RefreshLayerRenderVisibility();
     const auto* Theme=ShaftArt(Recipe);
-    if (!Theme) return;
+    // Saved authored rooms without an ArtTheme still need their PNG materials lit.
     for (int32 I=0;I<GeneratedLevels.Num();++I)
     {
         ULevelStreamingDynamic* Stream=GeneratedLevels[I];
         if (!Stream || !Stream->IsLevelVisible() || DecoratedLevels.Contains(Stream)) continue;
         auto* Level=Stream->GetLoadedLevel();
         if (!Level) continue;
-        for (AActor* Actor:Level->Actors) if (Actor && Actor->FindFunction(TEXT("Get PullPush IK Location")))
+        if (Theme) for (AActor* Actor:Level->Actors) if (Actor && Actor->FindFunction(TEXT("Get PullPush IK Location")))
             UPOICorridorTools::ConfigurePushPlane(Actor);
         FRandomStream Random(HashCombineFast(Seed,I+1));
         TArray<APOIKitBlock*> Blocks;
@@ -408,10 +410,16 @@ void APOIShaft::ApplyLoadedArt()
         Blocks.Sort([](const APOIKitBlock& A,const APOIKitBlock& B){return A.GetFName().LexicalLess(B.GetFName());});
         for (auto* Block:Blocks)
         {
-            Theme->Apply(Block->Settings,Random); Block->RefreshAppearance();
+            if (Theme) Theme->Apply(Block->Settings,Random);
+            Block->RefreshAppearance();
             if (bProjectBackground && Block->Settings.Kind==EPOIKitKind::Background)
                 for (auto* C:Block->GetComponents()) if (auto* Mesh=Cast<UStaticMeshComponent>(C)) Mesh->SetVisibility(false);
         }
+        int32 LitSlots=0;
+        for (AActor* Actor:Level->Actors)
+            if (IsValid(Actor) && !Actor->IsA<APOIKitBlock>() && !Actor->IsA<APawn>() && !Actor->IsA<ASirrohWorldItem>())
+                LitSlots+=POIImageLighting::ApplyToActor(Actor);
+        if (LitSlots>0) UE_LOG(LogTemp,Display,TEXT("POI lit native PNG slots=%d level=%s"),LitSlots,*Stream->GetWorldAssetPackageName());
         DecoratedLevels.Add(Stream);
     }
 }

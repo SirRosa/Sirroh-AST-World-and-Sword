@@ -376,7 +376,8 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         if (!SolidEarth.V.IsEmpty())
         {
             const int32 EarthSection=EarthSectionBase+Layer-1;
-            SolidEarth.Submit(Mesh,EarthSection); Mesh->SetMaterial(EarthSection,WallMaterial(Layer));
+            SolidEarth.Submit(Mesh,EarthSection);
+            Mesh->SetMaterial(EarthSection,WallMaterial(Layer,false,false,false,bUndergroundView));
         }
         Buffer.Submit(Mesh,Layer);
         const auto& Atlas=WorldData->Layers[Layer-1].Atlas;

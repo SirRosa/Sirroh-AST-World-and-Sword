@@ -333,6 +333,13 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
                 {
                     const bool bVisible=bUndergroundView || IsSurfaceVisibleUndergroundSection(Section);
                     if (Mesh->IsMeshSectionVisible(Section)!=bVisible) Mesh->SetMeshSectionVisible(Section,bVisible);
+                    // The same solid earth is visible behind surface slopes and through
+                    // underground shell openings. Only change its material in the latter view.
+                    if (IsEarthSection(Section))
+                    {
+                        auto* Material=WallMaterial(Section-EarthSectionBase+1,false,false,false,bUndergroundView);
+                        if (Mesh->GetMaterial(Section)!=Material) Mesh->SetMaterial(Section,Material);
+                    }
                 }
     }
 }

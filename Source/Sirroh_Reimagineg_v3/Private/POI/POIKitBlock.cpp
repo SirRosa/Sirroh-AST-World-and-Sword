@@ -1,4 +1,5 @@
 #include "POI/POIKitBlock.h"
+#include "POIImageLighting.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/ChildActorComponent.h"
@@ -248,14 +249,8 @@ void APOIKitBlock::RefreshAppearance()
     Visual->SetRelativeScale3D(Card?FVector(Size.X*ActorScale.X/100,Size.Z*ActorScale.Z/100,1):Size*ActorScale/100);
     UMaterialInterface* Material=Settings.Material.LoadSynchronous();
     if (!Material && Card) Material=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIPrototype/M_POIImage.M_POIImage"));
-    if (Settings.Kind==EPOIKitKind::Background)
-    {
-        // Background cards (including streamed authored shaft/room modules) use a
-        // non-emissive, diffuse shader. Keep platform/prop materials untouched.
-        if (auto* Lit=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit_LitBackground.M_KitImageFit_LitBackground"))) Material=Lit;
-        else UE_LOG(LogTemp,Error,TEXT("POI: missing lit background material"));
-    }
-    Visual->SetMaterial(0,Material);
+    // Resolve per face below: both the front PNG and optional top/bottom PNG
+    // must react to scene lighting. Do not replace a custom already-lit platform material.
     UTexture2D* FrontImage=Settings.Image.LoadSynchronous();
     UTexture2D* CapImage=Settings.TopImage.LoadSynchronous();
 #if WITH_EDITOR
@@ -267,8 +262,14 @@ void APOIKitBlock::RefreshAppearance()
 #endif
     auto ApplyImage=[&](UStaticMeshComponent* Face,UTexture2D* Image,const FVector4& Bounds)
     {
-        Face->SetMaterial(0,Material);
-        if (Material) if (auto* MID=Face->CreateDynamicMaterialInstance(0,Material))
+        UMaterialInterface* FaceMaterial=Material;
+        if (Settings.Kind==EPOIKitKind::Background || (Image && (!Material || POIImageLighting::IsUnlit(Material))))
+        {
+            if (auto* Lit=POIImageLighting::LitImageMaterial()) FaceMaterial=Lit;
+            else UE_LOG(LogTemp,Error,TEXT("POI: missing lit PNG material"));
+        }
+        Face->SetMaterial(0,FaceMaterial);
+        if (FaceMaterial) if (auto* MID=Face->CreateDynamicMaterialInstance(0,FaceMaterial))
         {
             if (Image) MID->SetTextureParameterValue(TEXT("ImageTexture"),Image);
             MID->SetVectorParameterValue(TEXT("Tint"),Settings.Tint);
