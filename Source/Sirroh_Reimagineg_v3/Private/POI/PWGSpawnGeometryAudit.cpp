@@ -119,11 +119,17 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             auto CheckVisibility=[&](bool bUnderground)
             {
                 G->UpdateGameplayView(FTransform::Identity,0.f,16.f/9.f);
-                int32 Surface=0, Cave=0, Props=0;
-                for (const auto& Pair:G->Chunks) if (const auto* Mesh=Pair.Value.Get())
+                int32 Surface=0, SurfaceSections=0, Cave=0, Earth=0, Props=0;
+                for (const auto& Pair:G->Chunks) if (auto* Mesh=Pair.Value.Get())
                 {
                     ++Surface;
-                    TestTrue(TEXT("Surface component layer visibility"),Mesh->IsVisible()!=bUnderground);
+                    TestTrue(TEXT("Surface component remains visible and registered"),Mesh->IsVisible() && Mesh->IsRegistered());
+                    for (int32 S=0;S<Mesh->GetNumSections();++S)
+                        if (const auto* Part=Mesh->GetProcMeshSection(S); Part && !Part->ProcVertexBuffer.IsEmpty())
+                        {
+                            if (S>=3) ++SurfaceSections;
+                            TestTrue(TEXT("Actual terrain/water draw section visibility"),Mesh->IsMeshSectionVisible(S)!=bUnderground);
+                        }
                 }
                 for (const auto& Pair:G->DecorationChunks)
                 {
@@ -146,12 +152,18 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                         for (int32 S=0;S<Batch.UndergroundSectionBounds.Num();++S) if (Batch.UndergroundSectionBounds[S].IsValid)
                         {
                             ++Cave;
-                            TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceEntranceSection(S)));
+                            if (G->IsEarthSection(S))
+                            {
+                                ++Earth;
+                                TestTrue(TEXT("Solid earth remains visible in both domains"),Mesh->IsMeshSectionVisible(S));
+                            }
+                            else TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceVisibleUndergroundSection(S)));
                         }
                 }
-                TestTrue(TEXT("Visibility audit has surface geometry"),Surface>0);
+                TestTrue(TEXT("Visibility audit has actual terrain draw sections"),Surface>0 && SurfaceSections>0);
+                TestTrue(TEXT("Visibility audit has solid earth backing"),Earth>0);
                 TestTrue(TEXT("Visibility audit has cave geometry"),Cave>0);
-                AddInfo(FString::Printf(TEXT("LAYER_VISIBILITY underground=%d surface=%d cave_sections=%d props=%d"),bUnderground,Surface,Cave,Props));
+                AddInfo(FString::Printf(TEXT("LAYER_VISIBILITY underground=%d surface=%d terrain_sections=%d cave_sections=%d solid_earth=%d props=%d"),bUnderground,Surface,SurfaceSections,Cave,Earth,Props));
             };
             TMap<UProceduralMeshComponent*,ECollisionEnabled::Type> CollisionBefore;
             for (auto* Mesh:Meshes) CollisionBefore.Add(Mesh,Mesh->GetCollisionEnabled());
@@ -164,7 +176,12 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             if (Fresh*Size<D->MaxX && !G->Chunks.Contains(Fresh))
             {
                 G->BuildChunk(Fresh);
-                if (auto* Surface=G->Chunks.FindRef(Fresh).Get()) TestFalse(TEXT("Newly streamed surface hidden underground"),Surface->IsVisible());
+                if (auto* Surface=G->Chunks.FindRef(Fresh).Get())
+                {
+                    for (int32 S=0;S<Surface->GetNumSections();++S)
+                        if (const auto* Part=Surface->GetProcMeshSection(S); Part && !Part->ProcVertexBuffer.IsEmpty())
+                            TestFalse(TEXT("Newly streamed terrain draw section hidden underground"),Surface->IsMeshSectionVisible(S));
+                }
                 else AddError(TEXT("Fresh chunk did not build"));
                 CheckVisibility(true);
             }

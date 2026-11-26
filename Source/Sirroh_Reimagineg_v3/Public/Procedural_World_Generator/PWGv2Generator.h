@@ -144,8 +144,11 @@ private:
     bool IsOpening(int32 Layer, float X, float Y) const;
     void UpdateCutaway(const FVector& Player);
     void ApplyChunkLayerVisibility(int32 Index);
-    // Surface shaft lining is independent of the ordinary cave shell.
-    static bool IsSurfaceEntranceSection(int32 Section) { return Section==9 || Section==10 || Section==13 || Section==21; }
+    // Only entrance linings and the solid earth backing may render from the surface.
+    // Earth is NOT cave geometry: its top edge meets the surface behind the playable lanes.
+    static constexpr int32 EarthSectionBase=25;
+    static bool IsEarthSection(int32 Section) { return Section>=EarthSectionBase && Section<EarthSectionBase+4; }
+    static bool IsSurfaceVisibleUndergroundSection(int32 Section) { return IsEarthSection(Section) || Section==9 || Section==10 || Section==13 || Section==21; }
     void CaptureVisit();
     FString SlotName() const;
     void MakeProfile();

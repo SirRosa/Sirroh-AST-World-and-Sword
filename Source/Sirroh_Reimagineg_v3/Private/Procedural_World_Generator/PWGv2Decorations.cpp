@@ -281,7 +281,16 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
 void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
 {
     // Render state only: keep hulls, navigation, actors, simulation and streaming intact.
-    if (auto* Surface=Chunks.FindRef(Index).Get()) Surface->SetVisibility(!bUndergroundView);
+    if (auto* Surface=Chunks.FindRef(Index).Get())
+    {
+        // Keep the procedural component registered/visible; toggle actual draw sections,
+        // not the component. This also restores the water and terrain after a layer switch.
+        Surface->SetVisibility(true);
+        for (int32 Section=0;Section<Surface->GetNumSections();++Section)
+            if (const auto* Part=Surface->GetProcMeshSection(Section); Part && !Part->ProcVertexBuffer.IsEmpty())
+                if (Surface->IsMeshSectionVisible(Section)==bUndergroundView)
+                    Surface->SetMeshSectionVisible(Section,!bUndergroundView);
+    }
     if (auto* Grass=GrassChunks.FindRef(Index).Get()) Grass->SetVisibility(!bUndergroundView);
     if (auto* Batch=DecorationChunks.Find(Index))
     {
@@ -307,7 +316,10 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
         if (auto* Mesh=UndergroundChunks.FindRef(Index).Get())
             for (int32 Section=0;Section<Batch->UndergroundSectionBounds.Num();++Section)
                 if (Batch->UndergroundSectionBounds[Section].IsValid)
-                    Mesh->SetMeshSectionVisible(Section,bUndergroundView || IsSurfaceEntranceSection(Section));
+                {
+                    const bool bVisible=bUndergroundView || IsSurfaceVisibleUndergroundSection(Section);
+                    if (Mesh->IsMeshSectionVisible(Section)!=bVisible) Mesh->SetMeshSectionVisible(Section,bVisible);
+                }
     }
 }
 
@@ -366,7 +378,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
             {
                 const FBox& Bounds = Batch.UndergroundSectionBounds[Section];
                 if (!Bounds.IsValid) continue;
-                const bool bVisible = (bUndergroundView || IsSurfaceEntranceSection(Section)) && InView(Bounds);
+                const bool bVisible = (bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && InView(Bounds);
                 if (Mesh->IsMeshSectionVisible(Section) != bVisible)
                     Mesh->SetMeshSectionVisible(Section, bVisible);
             }

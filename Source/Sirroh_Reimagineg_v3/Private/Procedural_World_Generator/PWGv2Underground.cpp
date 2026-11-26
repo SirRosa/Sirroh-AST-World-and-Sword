@@ -204,7 +204,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     Samples.Sort();
     for (int32 Layer=1;Layer<=4;++Layer)
     {
-        FPWGv2MeshBuffers Buffer, Backdrop, NearShell;
+        FPWGv2MeshBuffers Buffer, Backdrop, NearShell, SolidEarth;
         for (int32 I=0;I<Samples.Num()-1;++I)
         {
             const float X0=Samples[I],X1=Samples[I+1],Mid=(X0+X1)/2;
@@ -245,7 +245,8 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             {
                 return EarthTopLayer == 0 ? SurfaceRowHeight(X) : LayerFloor(EarthTopLayer,X);
             };
-            Backdrop.Quad(FVector(X0,EarthY,Z0),FVector(X1,EarthY,Z1),
+            // Keep solid soil visible even when the tunnel walls/floors are culled.
+            SolidEarth.Quad(FVector(X0,EarthY,Z0),FVector(X1,EarthY,Z1),
                 FVector(X1,EarthY,EarthTop(X1)),FVector(X0,EarthY,EarthTop(X0)),FLinearColor(0.55f,0.55f,0.55f));
             // Actual swept tunnel cross-sections, attached to the floor and roof.
             // The camera-side shell is cut away locally; the far shell remains opaque.
@@ -296,10 +297,16 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         {
             const float Scale=100.f/FMath::Max(25.f,Row->TilingWorldSize);
             for (auto& UV:Backdrop.UV) UV*=Scale;
+            for (auto& UV:SolidEarth.UV) UV*=Scale;
             for (auto& UV:NearShell.UV) UV*=Scale;
         }
         NearShell.Submit(Mesh,16+Layer); Mesh->SetMaterial(16+Layer,WallMaterial(Layer,true));
         Backdrop.Submit(Mesh,Layer+4); Mesh->SetMaterial(Layer+4,WallMaterial(Layer));
+        if (!SolidEarth.V.IsEmpty())
+        {
+            const int32 EarthSection=EarthSectionBase+Layer-1;
+            SolidEarth.Submit(Mesh,EarthSection); Mesh->SetMaterial(EarthSection,WallMaterial(Layer));
+        }
         Buffer.Submit(Mesh,Layer);
         const auto& Atlas=WorldData->Layers[Layer-1].Atlas;
         Mesh->SetMaterial(Layer,Atlas.Texture.IsNull()?TerrainMaterialAt((Start+End)/2):AtlasMaterial(Atlas,FLinearColor(0.5,0.5,0.6),true));
@@ -393,7 +400,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             continue;
         }
     }
-    int32 POISection=25;
+    int32 POISection=EarthSectionBase+4;
     for (auto& Pair:POIWallBuffers) { Pair.Value.Submit(Mesh,POISection); Mesh->SetMaterial(POISection++,POIWallMaterials[Pair.Key]); }
     for (auto& Entry:ShaftWalls)
     {
