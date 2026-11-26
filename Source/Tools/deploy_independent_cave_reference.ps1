@@ -5,9 +5,9 @@ $p='D:\0 Sirro\Unreal Projects\AST_V1_18'
 $e='D:\0 Sirro\UE 5.8.1\UE_5.8'
 $u=Join-Path $p 'AST_V1_18.uproject'
 $d=Join-Path $p 'Saved/ChatGPT/IndependentCaveReference_20261126'
-$stage=Join-Path $d 'staging_a346f34'
-$backup=Join-Path $d 'backup_a346f34'
-$commit='a346f34f06da209361f2f6f8a087fb01246b6049'
+$stage=Join-Path $d 'staging_927db8b'
+$backup=Join-Path $d 'backup_927db8b'
+$commit='927db8b24371335754571048609179bac22ca3de'
 $root='Content/Systems/Procedural_World_Generator/PWG_v2'
 $newAsset="$root/M_PWGv2_DepthAtmosphere_CaveReference.uasset"
 $newRock="$root/M_PWGv2_CaveReferenceRock.uasset"
@@ -18,20 +18,20 @@ $entries=@(
 @{Path='Source/Sirroh_Reimagineg_v3/Public/Procedural_World_Generator/PWGv2Generator.h';Old='8b687ff4b2ab926a3b6e1d650420337617b12dfd';New='12129df4dc7a8b90ff471d862de63f88a9c34f2d'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2Decorations.cpp';Old='31ba2e6451f72a7a8d45115dadbf8554b673c877';New='a3237272a0e43537daa7be26257892bac7131fcc'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2Generator.cpp';Old='7043038aced6ff3a3f7e8131ea38d5a03e1a41c2';New='d58f29a0467fdfae9004209bf80fcb741f991b6e'},
-@{Path='Source/Sirroh_Reimagineg_v3/Private/PWG/PWGEnvironmentV2.cpp';Old='8b2f140f223be89e100806e66a5d8d253ec5303e';New='3701dabe7ec5fc98398967fec434fac5bf5d4112'},
+@{Path='Source/Sirroh_Reimagineg_v3/Private/PWG/PWGEnvironmentV2.cpp';Old='8b2f140f223be89e100806e66a5d8d253ec5303e';New='52df6fb8bc6f5f582a8a47de7a1e1451b1a33b06'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Debug/SirrohDebugSubsystem.cpp';Old='2f23302e49ffb9b72c583030229cd0b272ba2234';New='f47e91480376e92eafbe4125eb431cd4dc21f916'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/PWG/PWGEnvironmentV2SemanticVerification.cpp';Old='e7450628f1950f3b5095e1bcfb5762ffc6ea9222';New='ff51079321352e04ce96ddb3e18490d08f5b4691'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2IndependentCave.h';Old='';New='00e9a79f26abfdf6688e3afbe360dc9de5c53c8b'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2IndependentCave.cpp';Old='';New='290c6142438f77caa937437a26f3315fa059b026'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2IndependentCaveTests.cpp';Old='';New='872f71a7608a327c3412c012dcd4ebc312d3b4ee'},
-@{Path='Source/Tools/create_pwg_cave_reference_pp.py';Old='';New='f92982100c5ff4c84da18bb8d7acaeddd73c7647'},
+@{Path='Source/Tools/create_pwg_cave_reference_pp.py';Old='';New='db5684947a11349d41b0406bbd3ba8f8afff3bb3'},
 @{Path='Source/Tools/create_pwg_cave_reference_rock.py';Old='';New='ac276cab40c2032a4b82ca5895678d8eb553b1d5'}
 )
 New-Item -ItemType Directory -Path $d,$stage,$backup -Force | Out-Null
-$result=Join-Path $d 'result.txt'
+$result=Join-Path $d 'result_retry.txt'
 if(Test-Path $result){Copy-Item $result (Join-Path $d ('result_before_'+(Get-Date -Format 'yyyyMMdd_HHmmss')+'.txt'))}
 "COMMIT=$commit" | Set-Content $result
-function Note([string]$s){$s | Add-Content $result; Write-Output $s}
+function Note([string]$s){for($i=0;$i -lt 30;$i++){try{$s | Add-Content -Path $result -ErrorAction Stop; Write-Output $s; return}catch{if($i -eq 29){throw};Start-Sleep -Milliseconds 300}}}
 function GitHash([string]$f){$h=& git hash-object --no-filters $f;if($LASTEXITCODE -ne 0){throw "git hash failed: $f"};return $h.Trim()}
 function CheckNoEditor {
  if(Get-Process UnrealEditor,UnrealEditor-Cmd,AST_V1_18 -ErrorAction SilentlyContinue){
