@@ -99,13 +99,13 @@ try{
  $ErrorActionPreference='Stop'
  Note "TEST_EXIT=$rc"
  $log=Get-Content (Join-Path $d 'test.log') -Raw
- $matches=Select-String -Path (Join-Path $d 'test.log') -Pattern 'Test Completed|Result=\{|Found [0-9]+ automation tests|No automation tests'
- foreach($m in $matches){Note $m.Line}
+ $testLines=Select-String -Path (Join-Path $d 'test.log') -Pattern 'Test Completed|Result=\{|Found [0-9]+ automation tests|No automation tests'
+ foreach($m in $testLines){Note $m.Line}
  CheckOriginals
  Note 'LEGACY_AND_ASD_SHA256=UNCHANGED'
  if($rc -ne 0 -or $log -match 'Result=\{Fail\}'){throw 'Technical tests failed; see test.log'}
  foreach($n in @('VisualProfile','SpawnGeometryAudit','StreamingCost','RoomChains')){
-  if(!($matches | Where-Object {$_.Line -match 'Result=\{Success\}' -and $_.Line -match $n})){throw "No verified success for $n"}
+  if(!($testLines | Where-Object {$_.Line -match 'Result=\{Success\}' -and $_.Line -match $n})){throw "No verified success for $n"}
  }
  Note 'TECHNICAL_TESTS=PASS'
  Note 'VISUAL_BASELINE_AND_QA=PENDING'

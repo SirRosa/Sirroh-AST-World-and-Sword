@@ -16,15 +16,16 @@ Zakres: pakiet Sirroh AST Visual Foundation AI, kroki 00–03. Gałąź feature/
 
 ## 01 — Profile wizualne
 - [x] Implementacja C++: transient Legacy / Underground_Stylized, niezależne od FPWGv2WorldRow; zachowanie override przy ponownym GenerateWorld na tym samym generatorze. Nowy aktor/mapa wraca do Legacy.
-- [x] Implementacja resolvera, sanitization, fallback, strefa stabilna względem generatora +/- (LaneSpacing + 50 + padding), test jednostkowy Sirroh.PWG.VisualProfile (jeszcze nieuruchomiony).
+- [x] Implementacja resolvera, sanitization, fallback, strefa stabilna względem generatora +/- (LaneSpacing + 50 + padding), test jednostkowy Sirroh.PWG.VisualProfile (Success).
 
 ## 02 — Depth Atmosphere V2
 - [x] Kod przełączania jednego aktywnego MID oraz wersjonowany skrypt authoringu osobnego V2. Shader wyłącznie multiplies/lerps istniejący kolor, bez addytywnego wypełnienia i zmian Default Lit; czerń pozostaje czernią. Ochrona jasnych pikseli, blend-in do V2. Legacy przełączany natychmiast; powierzchnia zawsze Legacy.
-- [ ] Weryfikacja assetu, cook, rendering i A/B.
+- [x] Asset utworzony lokalnie z D3D12: VISUAL_FOUNDATION_V2_SAVED, ASSET_AUTHOR_EXIT=0, SHA256 D9AFA66C19389C4D69A2BA6121FDCF40C0A1F4A2F740EC3021DE0741EF2E5820.
+- [ ] Cook, rendering w gameplay i A/B.
 
 ## 03 — F7 i QA
 - [x] Implementacja F7: WIZUALIA / Visual Profiles, tryb A/B, runtime status, edycja kolorów, reset i eksport JSON profilu bez DebugRebuild. Istniejący F7 nadal otwiera sandbox świata zgodnie z dotychczasowym zachowaniem (save na dysku nie jest modyfikowany).
-- [ ] Kontrolowane wdrożenie, build, testy resolvera i regresji.
+- [x] Kontrolowane wdrożenie (hashy staging/backup/deployed PASS); BUILD_EXIT=0, TEST_EXIT=0. Cztery testy Unreal zwróciły Success (szczegóły niżej).
 - [ ] Akceptacja wizualna użytkownika.
 
 ## 04–06
@@ -33,6 +34,20 @@ Nie rozpoczęto. Wymagają akceptacji poprzedniego etapu.
 ### Wartości eksperymentalne (startowe, niezatwierdzone wizualnie)
 Mode Legacy (domyślnie); Strength 1; NeutralPadding 10 cm; BackRange 150 cm; FrontRange 130 cm; BackgroundTint (0.76,0.84,1); FogStrength 0.65; Desaturation 0.55; ForegroundTint (0.78,0.66,0.90); ForegroundDarkness 0.55; BlendSeconds 0.25 s. Brak nowych oparów. Brak additive lift i nowej pikselizacji.
 Zachowanie wszystkich pasm ma pierwszeństwo: prostokątne ściany Y=75 i część płytkich naturalnych ścian mogą pozostać neutralne. Dodatkowa semantyka/geometria wymaga osobnej akceptacji.
-Status: kod na feature branch; lokalny asset, kompilacja, testy, obraz i pomiar jeszcze niepotwierdzone. Nie merge'ować.
+Status: kod na feature branch, wdrożony i skompilowany lokalnie, cztery testy techniczne zaliczone. Obraz i pomiar niepotwierdzone. Nie merge'ować.
 
 Wdrożenie: pierwsze polecenie przekroczyło limit Windows przed uruchomieniem; wersjonowany skrypt deploy_visual_foundation_v1.ps1 używa krótkiego launchera i przypiętego SHA. Nie oznacza to błędu implementacji.
+
+### Wynik wdrożenia 2026-11-26
+- Kod: 202c3a6c0cb4b60b11e578925eafe8c25ff2ea61, launcher: ae32450203289bbcc18f4b9d5f5c813643db7d33.
+- LOCAL_PREFLIGHT, STAGING_HASHES, BACKUPS, DEPLOYED_HASHES: PASS.
+- ASSET_AUTHOR_EXIT=0; BUILD_EXIT=0 (AST_V1_18Editor Win64 Development, UE 5.8.1); TEST_EXIT=0 (-nullrhi).
+- Sirroh.POI.RoomChains: Success (09:56:17 UTC).
+- Sirroh.PWG.SpawnGeometryAudit: Success (09:56:28 UTC).
+- Sirroh.PWG.StreamingCost: Success (09:56:31 UTC).
+- Sirroh.PWG.VisualProfile: Success (09:56:31 UTC).
+- LEGACY_AND_ASD_SHA256=UNCHANGED. Audyt geometrii użył kopii zapisów i nowych seedów testowych; nie wykonywano regeneracji oryginalnego zapisu.
+- Uwaga: skrypt wdrożeniowy zakończył się kodem 1 na etapie raportowania, ponieważ nazwa zmiennej $matches kolidowała z automatyczną zmienną PowerShell $Matches; komunikat FAILED=No verified success for SpawnGeometryAudit jest sprzeczny z czterema rzeczywistymi rekordami Test Completed. Zmieniono nazwę kolekcji na $testLines. Nie uruchamiano ponownego wdrożenia; log źródłowy zachowano bez zmian.
+- Logi: https://drive.google.com/drive/folders/13qsCtlcg4qhONRFqdunV4PoaJW-JGff7 (Saved/ChatGPT/VisualFoundation_20261126; author.log, build.log, test.log, result.txt; backup_202c3a6).
+- Test ręczny: uruchomić nowo skompilowany edytor, wczytać istniejący świat, w podziemiach F7 → WIZUALIA / Visual Profiles → Mode = Underground_Stylized. Porównać z Legacy przy tej samej kamerze i świetle. Zmiany parametrów live, reset i eksport; bez DebugRebuild. Restart edytora wymagany po zmianach C++, nie przy przełączaniu profilu. Legacy jest domyślne i stanowi natychmiastowe wycofanie eksperymentu. Przy pełnym rollbacku przy zamkniętym edytorze przywrócić 4 stare pliki C++ z backupu, usunąć wyłącznie dodany test, authoring script i nowy asset po weryfikacji hashy, ponownie skompilować; nie dotykać save.
+- Otwarte bramki: rzeczywisty baseline Legacy w gameplay (screeny, Settings, CPU/GPU median/p95), porównanie A/B V2, ręczna obsługa F7, cook i pełne potwierdzenie istniejącego zapisu w rozgrywce. Bez akceptacji nie włączać domyślnie V2, nie rozpoczynać 04–06 i nie merge'ować do main.
