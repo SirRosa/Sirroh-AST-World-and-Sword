@@ -11,6 +11,7 @@ void APWGv2Generator::ResetCaveReference()
     if(IsValid(CaveReferenceMesh)) CaveReferenceMesh->DestroyComponent();
     CaveReferenceMesh=nullptr; CaveReferenceMaterials.Reset();
     for(float& V:CaveReferenceTextures) V=-1.f;
+    CaveReferenceFlatAlbedo=-1.f;
     CaveReferenceDepth=0.f;
     if(bWasActive) for(const auto& Pair:UndergroundChunks) ApplyChunkLayerVisibility(Pair.Key);
 }
@@ -110,6 +111,13 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
     if(IsValid(CaveReferenceMesh))
     {
         if(CaveReferenceMesh->IsVisible()!=bWanted) CaveReferenceMesh->SetVisibility(bWanted);
+        const float Flat=Profile.bDisableBackgroundAmbient ? .006f : .16f;
+        if(Flat!=CaveReferenceFlatAlbedo)
+        {
+            for(const auto& M:CaveReferenceMaterials) if(IsValid(M))
+                M->SetVectorParameterValue(TEXT("CaveFlatAlbedo"),FLinearColor(Flat,Flat*1.06f,Flat*1.12f,1.f));
+            CaveReferenceFlatAlbedo=Flat;
+        }
         const bool Show[4]={Profile.bShowCaveNear,Profile.bShowCaveMid,Profile.bShowCaveFar,Profile.bShowCaveClosure};
         for(int32 I=0;I<4;++I)
         {
