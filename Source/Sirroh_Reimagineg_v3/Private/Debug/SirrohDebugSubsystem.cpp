@@ -427,12 +427,38 @@ private:
             TWeakObjectPtr<APWGEnvironmentV2> E=Cast<APWGEnvironmentV2>(Selected->Owner.Get());
             Fields->AddSlot().AutoHeight()[SNew(STextBlock).AutoWrapText(true)
                 .Text_Lambda([E]{return SirrohDebug::Text(E.IsValid()?E->GetVisualProfileStatus():TEXT("Brak srodowiska."));})];
-            Label(TEXT("Mode: Legacy / Underground_Stylized (domyslny). Maski: cyan = tyl, magenta = przekroj, zielony = gameplay/pozostale. Ambient=0 lub DisableBackgroundAmbient dla ciemnosci. Zmiany LIVE."));
-            Fields->AddSlot().AutoHeight()[Button(TEXT("Preset demonstracyjny"),[this,E]{
-                if(E.IsValid() && CanEdit()){E->ResetVisualProfileToDemo();Status=E->GetVisualProfileStatus();RebuildFields();}
-            })];
+            Label(TEXT("Maski: cyjan = tlo, zolty = powierzchnie rozgrywki, magenta = przekroj, zielony = postac/przedmioty/pozostale. Zmiany LIVE."));
+            const TCHAR* Names[]={TEXT("Dark Cave"),TEXT("Atmospheric Cave"),TEXT("Warm Ruins")};
+            for(int32 I=0;I<3;++I)
+                Fields->AddSlot().AutoHeight().Padding(0,2)[Button(Names[I],[this,E,I]{
+                    if(E.IsValid() && CanEdit()){E->ApplyVisualPreset(I);Status=E->GetVisualProfileStatus();RebuildFields();}
+                })];
+            auto Group=[this](const TCHAR* GroupName,std::initializer_list<const TCHAR*> Properties)
+            {
+                auto Parent=Fields;
+                auto Children=SNew(SVerticalBox);
+                Fields=Children;
+                const int32 Before=FieldCount;
+                for(const TCHAR* PropertyName:Properties)
+                    if(FProperty* P=FindFProperty<FProperty>(FPWGVisualProfile::StaticStruct(),FName(PropertyName)))
+                    {
+                        auto Address=Selected->Address;
+                        SirrohDebug::FAddress A=[Address,P]()->void*{void* V=Address();return V?P->ContainerPtrToValuePtr<void>(V):nullptr;};
+                        WalkProperty(Selected,P,A,P->GetName(),0);
+                    }
+                Fields=Parent;
+                if(FieldCount>Before) Fields->AddSlot().AutoHeight().Padding(2,4)
+                    [SNew(SExpandableArea).InitiallyCollapsed(false).HeaderContent()[SNew(STextBlock).Text(SirrohDebug::Text(GroupName))].BodyContent()[Children]];
+            };
+            Group(TEXT("Profil"),{TEXT("Mode"),TEXT("Strength"),TEXT("BlendSeconds")});
+            Group(TEXT("Tlo"),{TEXT("BackgroundBrightness"),TEXT("BackgroundContrast"),TEXT("BackgroundTint"),TEXT("BackgroundAmbient"),TEXT("bDisableBackgroundAmbient"),TEXT("Desaturation")});
+            Group(TEXT("Powierzchnie rozgrywki"),{TEXT("GameplayBrightness"),TEXT("GameplayContrast"),TEXT("GameplayTint")});
+            Group(TEXT("Przekroj"),{TEXT("ForegroundDarkness"),TEXT("ForegroundTint")});
+            Group(TEXT("Atmosfera"),{TEXT("AtmosphereColor"),TEXT("FogStrength"),TEXT("BackRange")});
+            Group(TEXT("Diagnostyka"),{TEXT("bVisualizeMasks")});
+            Label(TEXT("NeutralPadding / FrontRange: pola zgodnosci, nieaktywne w shaderze semantycznym."));
         }
-        Walk(Selected,Selected->Type,Selected->Address,TEXT(""),0);
+        else Walk(Selected,Selected->Type,Selected->Address,TEXT(""),0);
         Label(FString::Printf(TEXT("%d pol. Wartosci zapisujesz Enterem. Referencje assetow tylko do odczytu."),FieldCount));
     }
     void Walk(TSharedPtr<SirrohDebug::FTarget> T,const UStruct* Type,SirrohDebug::FAddress Parent,FString Prefix,int32 Depth)

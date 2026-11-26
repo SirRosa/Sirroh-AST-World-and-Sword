@@ -69,7 +69,7 @@ APWGEnvironmentV2::APWGEnvironmentV2()
     DepthPostProcess->BlendWeight=0;
     // Config/DefaultGame.ini already always-cooks this PWG directory.
     StylizedDepthAsset=TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(
-        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_Semantic.M_PWGv2_DepthAtmosphere_Semantic")));
+        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_SemanticPOI.M_PWGv2_DepthAtmosphere_SemanticPOI")));
 
 
 	SkyMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("EnvironmentV2_Sky"));
@@ -1001,14 +1001,12 @@ void APWGEnvironmentV2::RefreshVisualProfile()
 
 FString APWGEnvironmentV2::GetVisualProfileStatus() const
 {
-    const auto* G=Cast<APWGv2Generator>(Generator);
     const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
-    const float Width=G?VisualProfile.ProtectedHalfWidth(G->Settings.LaneSpacing):0.f;
-    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | physical +/- %.0f cm (not a mask) | stencil 201/202 | transient"),
+    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
-        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,Width);
+        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f);
 }
 
 void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
@@ -1106,6 +1104,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             Material->SetVectorParameterValue(TEXT("ProfileAtmosphereColor"),Profile.AtmosphereColor);
             Scalar(TEXT("ProfileGameplayBrightness"),Profile.GameplayBrightness);
             Scalar(TEXT("ProfileGameplayContrast"),Profile.GameplayContrast);
+            Material->SetVectorParameterValue(TEXT("ProfileGameplayTint"),Profile.GameplayTint);
             Scalar(TEXT("ProfileVisualizeMasks"),Profile.bVisualizeMasks?1.f:0.f);
             LastProfileUniforms=Profile;
             LastProfileOrigin=ProfileOrigin;
