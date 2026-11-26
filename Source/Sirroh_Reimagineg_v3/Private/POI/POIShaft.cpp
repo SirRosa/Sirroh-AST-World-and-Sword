@@ -481,7 +481,7 @@ void APOIShaft::ApplyVisualMaskToActor(AActor* Actor)
         if(!bOpaque) continue;
         if(VisualStencilStates.ContainsByPredicate([Mesh](const FVisualStencilState& State){return State.Mesh.Get()==Mesh;})) continue;
         if(Mesh->bRenderCustomDepth) continue; // preserve pre-existing outline/interaction stencil
-        VisualStencilStates.Add({Mesh,Mesh->CustomDepthStencilValue,Mesh->bRenderCustomDepth,Stencil});
+        VisualStencilStates.Add({Mesh,Mesh->CustomDepthStencilValue,Mesh->bRenderCustomDepth!=0,Stencil});
         Mesh->SetCustomDepthStencilValue(Stencil);
         Mesh->SetRenderCustomDepth(true);
     }
