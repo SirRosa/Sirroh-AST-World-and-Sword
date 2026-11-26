@@ -98,7 +98,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                 auto* A=*It;
                 if (FMath::Abs(A->GetActorLocation().X-Spawn.X)>6000) continue;
                 AddInfo(FString::Printf(TEXT("SPAWN_SHAFT %s x=%.1f z=%.1f height=%.1f layer=%d levels=%d"),*A->GetName(),A->GetActorLocation().X,A->GetActorLocation().Z,A->Height,A->Recipe.UpperLayer,A->GeneratedLevels.Num()));
-                for (auto* Stream:A->GeneratedLevels) if (Stream&&Stream->GetLoadedLevel())
+                for (ULevelStreamingDynamic* Stream:A->GeneratedLevels) if (Stream&&Stream->GetLoadedLevel())
                 {
                     for (AActor* Actor:Stream->GetLoadedLevel()->Actors)
                     {
