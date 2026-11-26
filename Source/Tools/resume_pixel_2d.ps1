@@ -55,7 +55,7 @@ try {
  if($rc -ne 0 -or @($tests|Where-Object {$_.Line -match 'Result=\{Success\}'}).Count -lt 5 -or @($tests|Where-Object {$_.Line -match 'Result=\{Fail'}).Count -gt 0){throw 'Technical tests not verified'}
  Note 'TECHNICAL_TESTS=PASS'
  Copy-Item $copySource $copyDest
- $rc=Native $editor @($u,'-game','-PWGVisualPOIQA','-PWGPixel2DQA','-SirrohSkipMainMenu','-PWGWorld=VF_Pixel2D_20261126','-windowed','-ResX=1600','-ResY=900','-unattended','-nop4','-nosound','-nosplash','-stdout','-FullStdOutLogOutput','-ExecCmds=t.MaxFPS 60') (Join-Path $d 'render.log')
+ $rc=Native $editor @($u,'/Game/Levels/L_SirrohGameplay','-game','-PWGVisualPOIQA','-PWGPixel2DQA','-SirrohSkipMainMenu','-PWGWorld=VF_Pixel2D_20261126','-windowed','-ResX=1600','-ResY=900','-unattended','-nop4','-nosound','-nosplash','-stdout','-FullStdOutLogOutput','-ExecCmds=t.MaxFPS 60') (Join-Path $d 'render.log')
  Note "RENDER_EXIT=$rc"
  $rl=Get-Content (Join-Path $d 'render.log') -Raw
  if($rc -ne 0 -or $rl -notmatch 'VF_RENDER_COMPLETE' -or $rl -match 'VF_RENDER_FAIL|VF_RENDER_SCENE_UNAVAILABLE|PWG_PIXEL2D_CHUNK.*ready=0'){throw 'Render QA failed or incomplete'}
