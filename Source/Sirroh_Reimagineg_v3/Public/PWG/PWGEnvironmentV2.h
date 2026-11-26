@@ -84,7 +84,7 @@ struct FPWGVisualProfile
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
-    EPWGVisualMode Mode = EPWGVisualMode::Legacy;
+    EPWGVisualMode Mode = EPWGVisualMode::Underground_Stylized;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
     float Strength = 1.0f;
@@ -100,21 +100,49 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="20.0", ClampMax="2000.0", Units="cm"))
     float FrontRange = 130.0f;
 
-    /** Relative palette multiplier; luminance is normalized in the shader. */
+    /** Background palette multiplier, independent of physical lane. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
     FLinearColor BackgroundTint = FLinearColor(0.76f, 0.84f, 1.0f, 1.0f);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
-    float FogStrength = 0.65f;
+    float FogStrength = 0.40f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
-    float Desaturation = 0.55f;
+    float Desaturation = 0.35f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
     FLinearColor ForegroundTint = FLinearColor(0.78f, 0.66f, 0.90f, 1.0f);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
-    float ForegroundDarkness = 0.55f;
+    float ForegroundDarkness = 0.35f;
+
+    /** Display-referred gain on classified rear walls only. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="12.0"))
+    float BackgroundBrightness = 5.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.4", ClampMax="2.5"))
+    float BackgroundContrast = 0.85f;
+
+    /** Artistic ambient floor on rear walls only; zero allows a fully black room. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="0.4"))
+    float BackgroundAmbient = 0.10f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    FLinearColor AtmosphereColor = FLinearColor(0.37f,0.56f,0.78f,1.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="3.0"))
+    float GameplayBrightness = 1.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.4", ClampMax="2.5"))
+    float GameplayContrast = 1.f;
+
+    /** Blackout is scoped to the artistic background floor, never to real lights. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    bool bDisableBackgroundAmbient = false;
+
+    /** Cyan = rear, magenta = cutaway, green = gameplay/other visible pixels. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    bool bVisualizeMasks = false;
 
     /** Blend into V2; Legacy and surface switch back immediately for exact A/B. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="5.0", Units="s"))
@@ -143,6 +171,12 @@ struct FPWGVisualProfile
         Out.Desaturation = Safe(Desaturation,Defaults.Desaturation,0.f,1.f);
         Out.ForegroundTint = Color(ForegroundTint,Defaults.ForegroundTint);
         Out.ForegroundDarkness = Safe(ForegroundDarkness,Defaults.ForegroundDarkness,0.f,1.f);
+        Out.BackgroundBrightness = Safe(BackgroundBrightness,Defaults.BackgroundBrightness,0.f,12.f);
+        Out.BackgroundContrast = Safe(BackgroundContrast,Defaults.BackgroundContrast,0.4f,2.5f);
+        Out.BackgroundAmbient = Safe(BackgroundAmbient,Defaults.BackgroundAmbient,0.f,0.4f);
+        Out.AtmosphereColor = Color(AtmosphereColor,Defaults.AtmosphereColor);
+        Out.GameplayBrightness = Safe(GameplayBrightness,Defaults.GameplayBrightness,0.f,3.f);
+        Out.GameplayContrast = Safe(GameplayContrast,Defaults.GameplayContrast,0.4f,2.5f);
         Out.BlendSeconds = Safe(BlendSeconds,Defaults.BlendSeconds,0.f,5.f);
         return Out;
     }
@@ -166,7 +200,11 @@ struct FPWGVisualProfile
             && BackRange == Other.BackRange && FrontRange == Other.FrontRange
             && BackgroundTint == Other.BackgroundTint && FogStrength == Other.FogStrength
             && Desaturation == Other.Desaturation && ForegroundTint == Other.ForegroundTint
-            && ForegroundDarkness == Other.ForegroundDarkness;
+            && ForegroundDarkness == Other.ForegroundDarkness
+            && BackgroundBrightness == Other.BackgroundBrightness && BackgroundContrast == Other.BackgroundContrast
+            && BackgroundAmbient == Other.BackgroundAmbient && AtmosphereColor == Other.AtmosphereColor
+            && GameplayBrightness == Other.GameplayBrightness && GameplayContrast == Other.GameplayContrast
+            && bDisableBackgroundAmbient == Other.bDisableBackgroundAmbient && bVisualizeMasks == Other.bVisualizeMasks;
     }
 };
 
@@ -187,6 +225,7 @@ public:
     void SetRegionWeather(float CloudMultiplier, float WindStrength);
     bool IsDepthAtmosphereActive() const;
     void RefreshVisualProfile();
+    void ResetVisualProfileToDemo() { VisualProfile=FPWGVisualProfile(); RefreshVisualProfile(); }
     FString GetVisualProfileStatus() const;
 
     /** Runtime override; not serialized into the world plan. */
@@ -354,6 +393,13 @@ protected:
 private:
 #if !UE_BUILD_SHIPPING
     void VerifySkySequence();
+    void VerifySemanticVisuals();
+    int32 VisualProbeStep=0;
+    int32 VisualProbeFrames=0;
+    FVector VisualProbeCamera=FVector::ZeroVector;
+    FRotator VisualProbeRotation=FRotator::ZeroRotator;
+    float VisualProbeWidth=0.f;
+    UPROPERTY(Transient) TObjectPtr<AActor> VisualProbeTorch;
     int32 SkyVerificationFrame = 0;
 #endif
     void StartDynamicSky();

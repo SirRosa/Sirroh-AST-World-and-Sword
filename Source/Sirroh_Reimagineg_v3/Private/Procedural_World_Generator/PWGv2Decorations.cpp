@@ -341,6 +341,7 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
                         if (Mesh->GetMaterial(Section)!=Material) Mesh->SetMaterial(Section,Material);
                     }
                 }
+        SyncVisualMasks(Index);
     }
 }
 
@@ -403,6 +404,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
                 if (Mesh->IsMeshSectionVisible(Section) != bVisible)
                     Mesh->SetMeshSectionVisible(Section, bVisible);
             }
+            SyncVisualMasks(Pair.Key);
         }
     }
 }

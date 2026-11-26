@@ -69,7 +69,7 @@ APWGEnvironmentV2::APWGEnvironmentV2()
     DepthPostProcess->BlendWeight=0;
     // Config/DefaultGame.ini already always-cooks this PWG directory.
     StylizedDepthAsset=TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(
-        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_V2.M_PWGv2_DepthAtmosphere_V2")));
+        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_Semantic.M_PWGv2_DepthAtmosphere_Semantic")));
 
 
 	SkyMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("EnvironmentV2_Sky"));
@@ -937,6 +937,7 @@ void APWGEnvironmentV2::Tick(const float DeltaSeconds)
 
 #if !UE_BUILD_SHIPPING
     VerifySkySequence();
+    VerifySemanticVisuals();
 #endif
     // Opt-in developer verification only. It is inert in normal gameplay and
 	// lets unattended rendering tests capture the settled orthographic camera.
@@ -1005,7 +1006,7 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
     const float Width=G?VisualProfile.ProtectedHalfWidth(G->Settings.LaneSpacing):0.f;
-    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | protected +/- %.0f cm | transient (no world save)"),
+    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | physical +/- %.0f cm (not a mask) | stencil 201/202 | transient"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
         bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,Width);
 }
@@ -1013,7 +1014,7 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
 void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
 {
     LastDepthSunAmount=SunAmount;
-    const auto* WorldGenerator=Cast<APWGv2Generator>(Generator);
+    auto* WorldGenerator=Cast<APWGv2Generator>(Generator);
     if (!DepthPostProcess) return;
     DepthPostProcess->BlendWeight=IsDepthAtmosphereActive()?1.f:0.f;
     if (!DepthMaterial || !WorldGenerator) return;
@@ -1031,6 +1032,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     }
     const bool bV2=Profile.ResolveMode(bUndergroundView && S.bDepthAtmosphere,IsValid(StylizedDepthMaterial))
         ==EPWGVisualMode::Underground_Stylized;
+    WorldGenerator->SetVisualMaskPassEnabled(bV2);
     UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
     if (ActiveDepthMaterial.Get()!=Material)
     {
@@ -1098,6 +1100,13 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             Scalar(TEXT("ProfileFogStrength"),Profile.FogStrength);
             Scalar(TEXT("ProfileDesaturation"),Profile.Desaturation);
             Scalar(TEXT("ProfileForegroundDarkness"),Profile.ForegroundDarkness);
+            Scalar(TEXT("ProfileBackgroundBrightness"),Profile.BackgroundBrightness);
+            Scalar(TEXT("ProfileBackgroundContrast"),Profile.BackgroundContrast);
+            Scalar(TEXT("ProfileBackgroundAmbient"),Profile.bDisableBackgroundAmbient?0.f:Profile.BackgroundAmbient);
+            Material->SetVectorParameterValue(TEXT("ProfileAtmosphereColor"),Profile.AtmosphereColor);
+            Scalar(TEXT("ProfileGameplayBrightness"),Profile.GameplayBrightness);
+            Scalar(TEXT("ProfileGameplayContrast"),Profile.GameplayContrast);
+            Scalar(TEXT("ProfileVisualizeMasks"),Profile.bVisualizeMasks?1.f:0.f);
             LastProfileUniforms=Profile;
             LastProfileOrigin=ProfileOrigin;
             LastProfileNeutralWidth=Neutral;

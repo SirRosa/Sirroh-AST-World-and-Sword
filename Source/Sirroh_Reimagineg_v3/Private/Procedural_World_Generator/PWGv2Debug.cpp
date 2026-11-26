@@ -169,6 +169,7 @@ bool APWGv2Generator::DebugRebuild(bool Restore,FString& Error,bool Replan)
     for (auto& P:DecorationChunks)
     {
         for (auto C:P.Value.Components) if (C) C->DestroyComponent();
+        for (UProceduralMeshComponent* Mask:P.Value.VisualMasks) if (Mask) Mask->DestroyComponent();
         for (auto A:P.Value.Actors) if (A && A->GetOwner()==this) A->Destroy();
     }
     Chunks.Reset(); GrassChunks.Reset(); UndergroundChunks.Reset(); DecorationChunks.Reset();

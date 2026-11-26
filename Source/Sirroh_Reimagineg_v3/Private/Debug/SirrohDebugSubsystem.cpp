@@ -427,7 +427,10 @@ private:
             TWeakObjectPtr<APWGEnvironmentV2> E=Cast<APWGEnvironmentV2>(Selected->Owner.Get());
             Fields->AddSlot().AutoHeight()[SNew(STextBlock).AutoWrapText(true)
                 .Text_Lambda([E]{return SirrohDebug::Text(E.IsValid()?E->GetVisualProfileStatus():TEXT("Brak srodowiska."));})];
-            Label(TEXT("Mode: kliknij Legacy / Underground_Stylized. Zmiany LIVE, bez Przebuduj. Kolory: (R=...,G=...,B=...,A=1)."));
+            Label(TEXT("Mode: Legacy / Underground_Stylized (domyslny). Maski: cyan = tyl, magenta = przekroj, zielony = gameplay/pozostale. Ambient=0 lub DisableBackgroundAmbient dla ciemnosci. Zmiany LIVE."));
+            Fields->AddSlot().AutoHeight()[Button(TEXT("Preset demonstracyjny"),[this,E]{
+                if(E.IsValid() && CanEdit()){E->ResetVisualProfileToDemo();Status=E->GetVisualProfileStatus();RebuildFields();}
+            })];
         }
         Walk(Selected,Selected->Type,Selected->Address,TEXT(""),0);
         Label(FString::Printf(TEXT("%d pol. Wartosci zapisujesz Enterem. Referencje assetow tylko do odczytu."),FieldCount));

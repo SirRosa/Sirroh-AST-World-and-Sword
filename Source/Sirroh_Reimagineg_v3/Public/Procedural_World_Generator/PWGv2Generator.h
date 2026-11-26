@@ -20,6 +20,9 @@ struct FPWGv2DecorationBatch
     bool bGrassVisible = true;
     TArray<TWeakObjectPtr<class APWGProceduralTree>> Trees;
     TArray<FBox> UndergroundSectionBounds;
+    // Custom-depth-only geometry; original render sections and collision stay authoritative.
+    UPROPERTY(Transient) TArray<TObjectPtr<UProceduralMeshComponent>> VisualMasks;
+    bool bVisualMasksBuilt=false;
     UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Actors;
 };
 
@@ -34,6 +37,10 @@ public:
     UPWGv2WorldSave* BeginDebugSession();
     UPWGv2WorldSave* GetDebugWorld() const { return WorldData; }
     bool HasGlobalDepthAtmosphere() const;
+    void SetVisualMaskPassEnabled(bool bEnabled);
+    // Reserved stencil roles for this pass, independent of physical lane.
+    static constexpr int32 VisualRear=201, VisualCutaway=202;
+    static int32 VisualRoleForSection(int32 Section);
     bool IsDebugSession() const { return DebugOriginalWorld != nullptr; }
     UPWGv2WorldSave* GetDebugEditWorld() const { return DebugWorkingWorld; }
     bool DebugRebuild(bool Restore, FString& Error, bool Replan=false);
@@ -144,6 +151,9 @@ private:
     bool IsOpening(int32 Layer, float X, float Y) const;
     void UpdateCutaway(const FVector& Player);
     void ApplyChunkLayerVisibility(int32 Index);
+    void BuildVisualMasks(int32 Index);
+    void SyncVisualMasks(int32 Index);
+    bool bVisualMaskPassEnabled=false;
     // Only entrance linings and the solid earth backing may render from the surface.
     // Earth is NOT cave geometry: its top edge meets the surface behind the playable lanes.
     static constexpr int32 EarthSectionBase=25;

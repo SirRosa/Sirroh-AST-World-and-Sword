@@ -653,6 +653,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         const FBox& Box = Mesh->GetProcMeshSection(Section)->SectionLocalBox;
         SectionBounds.Add(Box.IsValid ? Box.TransformBy(Mesh->GetComponentTransform()) : FBox(ForceInit));
     }
+    if (bVisualMaskPassEnabled) BuildVisualMasks(Index);
     if (AsyncCooking) PendingUndergroundCollision.Add(Index,Hulls);
     if (HasAuthority()) for (int32 Layer=1;Layer<=4;++Layer)
     {

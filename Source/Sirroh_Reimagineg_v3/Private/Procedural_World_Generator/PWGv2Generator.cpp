@@ -46,9 +46,10 @@ bool APWGv2Generator::GenerateWorld(FName)
     for (auto& Pair:DecorationChunks)
     {
         for (UHierarchicalInstancedStaticMeshComponent* Component:Pair.Value.Components) if (Component) Component->DestroyComponent();
+        for (UProceduralMeshComponent* Mask:Pair.Value.VisualMasks) if (Mask) Mask->DestroyComponent();
         for (AActor* Actor:Pair.Value.Actors) if (Actor && Actor->GetOwner()==this) Actor->Destroy();
     }
-    UndergroundChunks.Reset(); DecorationChunks.Reset(); AtlasMaterials.Reset(); bVisitReady=false;
+    UndergroundChunks.Reset(); DecorationChunks.Reset(); AtlasMaterials.Reset(); bVisitReady=false; bVisualMaskPassEnabled=false;
     Chunks.Reset(); GrassChunks.Reset(); WorldData=nullptr;
     bLoadedFromSave=false; bWorldSaved=false; bUndergroundView=false;
     FParse::Value(FCommandLine::Get(),TEXT("PWGWorld="),WorldName);
@@ -403,6 +404,7 @@ void APWGv2Generator::StreamAt(float X,bool Immediate)
         if (auto* Batch=DecorationChunks.Find(I))
         {
             for (UHierarchicalInstancedStaticMeshComponent* Component:Batch->Components) if (Component) Component->DestroyComponent();
+            for (UProceduralMeshComponent* Mask:Batch->VisualMasks) if (Mask) Mask->DestroyComponent();
             for (AActor* Actor:Batch->Actors) if (Actor && Actor->GetOwner()==this) Actor->Destroy();
         }
         DecorationChunks.Remove(I);
