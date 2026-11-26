@@ -470,9 +470,10 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     }
     // Bake ambient falloff into the foreground mask only. Measure distance in X/Z
     // to the nearest actual room or shaft opening, not the current player or camera.
-    constexpr float ShadeRange=600.f, ShadeStep=100.f;
-    constexpr float EdgeShade=0.85f; // dedicated material multiplies the ordinary biome wall color by this factor
-    constexpr float DeepShade=0.35f; // relative to the edge, reached after six metres.
+    constexpr float ShadeRange=100.f, ShadeStep=100.f;
+    constexpr double ShadeMeshStep=20.0; // resolve the one-metre band in both axes
+    constexpr float EdgeShade=0.85f; // 15% darker than ordinary biome wall at the opening
+    // Exact black at and beyond 100 cm from every opening.
     const float ShadeStart=FMath::Max(WorldData->Regions[0].StartX,Start-ShadeRange-ShadeStep);
     const float ShadeEnd=FMath::Min(WorldData->Regions.Last().EndX,End+ShadeRange+ShadeStep);
     TArray<float> ShadeSamples=Samples;
@@ -544,7 +545,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             D2=FMath::Min(D2,(Point-(Edge.A+AB*T)).SizeSquared());
             if (D2<1.e-6) break;
         }
-        const float Shade=EdgeShade*FMath::Lerp(1.f,DeepShade,FMath::SmoothStep(0.f,ShadeRange,float(FMath::Sqrt(D2))));
+        const float Shade=EdgeShade*(1.f-FMath::SmoothStep(0.f,ShadeRange,float(FMath::Sqrt(D2))));
         ShadeCache.Add(Point,Shade); return Shade;
     };
     for (int32 Layer=1;Layer<=4;++Layer)
@@ -558,20 +559,61 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                 const FVector A=Mask.V[I],B=Mask.V[I+1],C=Mask.V[I+2],D=Mask.V[I+3];
                 const double H=FMath::Max(D.Z-A.Z,C.Z-B.Z);
                 if (H<=KINDA_SMALL_NUMBER) continue;
-                TArray<double,TInlineAllocator<16>> Stops={0.0,1.0};
-                // Refine both exposed edges; the huge deep backing stays a single strip.
-                for (double Offset=ShadeStep;Offset<=ShadeRange && Offset<H;Offset+=ShadeStep)
-                { Stops.AddUnique(Offset/H); Stops.AddUnique(1.0-Offset/H); }
-                Stops.Sort();
-                for (int32 J=1;J<Stops.Num();++J)
+                // Refine the horizontal coordinate too: a shaft edge is vertical, so
+                // vertical-only subdivision cannot resolve its narrow lateral gradient.
+                const int32 NX=FMath::Max(1,FMath::CeilToInt((B.X-A.X)/ShadeMeshStep));
+                // Determine only the height bands that can contain a non-black sample.
+                // Outside these bands all points are at least ShadeRange from every
+                // edge; leave the hundreds of metres of solid backing as large black quads.
+                TArray<FVector2D,TInlineAllocator<32>> Bands;
+                for (const auto& Edge:Edges)
                 {
-                    if (Stops[J]-Stops[J-1]<1.e-8) continue;
-                    const FVector P[]={FMath::Lerp(A,D,Stops[J-1]),FMath::Lerp(B,C,Stops[J-1]),FMath::Lerp(B,C,Stops[J]),FMath::Lerp(A,D,Stops[J])};
-                    Shaded.Quad(P[0],P[1],P[2],P[3],FLinearColor::White);
-                    for (int32 K=0;K<4;++K)
+                    if (FMath::Min(Edge.A.X,Edge.B.X)>B.X+ShadeRange || FMath::Max(Edge.A.X,Edge.B.X)<A.X-ShadeRange) continue;
+                    const double Low=FMath::Min(Edge.A.Y,Edge.B.Y)-ShadeRange;
+                    const double High=FMath::Max(Edge.A.Y,Edge.B.Y)+ShadeRange;
+                    if (High<FMath::Min(A.Z,B.Z) || Low>FMath::Max(C.Z,D.Z)) continue;
+                    // Use the union of the ranges at both sides of the trapezoid.
+                    const double HL=D.Z-A.Z, HR=C.Z-B.Z;
+                    if (HL<=KINDA_SMALL_NUMBER || HR<=KINDA_SMALL_NUMBER)
                     {
-                        const float S=ShadeAt(P[K]);
-                        Shaded.C[Shaded.C.Num()-4+K]=FLinearColor(S,S,S,0.f);
+                        // A tapering triangle needs conservative refinement at the narrow end.
+                        if (HL<=KINDA_SMALL_NUMBER && Low<=A.Z && High>=A.Z) { Bands.Add(FVector2D(0,1)); continue; }
+                        if (HR<=KINDA_SMALL_NUMBER && Low<=B.Z && High>=B.Z) { Bands.Add(FVector2D(0,1)); continue; }
+                    }
+                    const double T0=FMath::Clamp(FMath::Min((Low-A.Z)/FMath::Max(HL,1.e-8),(Low-B.Z)/FMath::Max(HR,1.e-8)),0.0,1.0);
+                    const double T1=FMath::Clamp(FMath::Max((High-A.Z)/FMath::Max(HL,1.e-8),(High-B.Z)/FMath::Max(HR,1.e-8)),0.0,1.0);
+                    if (T1>T0) Bands.Add(FVector2D(T0,T1));
+                }
+                Bands.Sort([](const FVector2D& L,const FVector2D& R){return L.X<R.X;});
+                TArray<FVector2D,TInlineAllocator<32>> MergedBands;
+                for (const auto& Band:Bands)
+                {
+                    if (!MergedBands.IsEmpty() && Band.X<=MergedBands.Last().Y)
+                        MergedBands.Last().Y=FMath::Max(MergedBands.Last().Y,Band.Y);
+                    else MergedBands.Add(Band);
+                }
+                TArray<double,TInlineAllocator<32>> Stops={0.0,1.0};
+                for (const auto& Band:MergedBands)
+                {
+                    const int32 NZ=FMath::Max(1,FMath::CeilToInt((Band.Y-Band.X)*H/ShadeMeshStep));
+                    for (int32 J=0;J<=NZ;++J) Stops.AddUnique(FMath::Lerp(Band.X,Band.Y,double(J)/NZ));
+                }
+                Stops.Sort();
+                for (int32 X=0;X<NX;++X)
+                {
+                    const double U0=double(X)/NX,U1=double(X+1)/NX;
+                    const FVector L0=FMath::Lerp(A,B,U0),L1=FMath::Lerp(A,B,U1);
+                    const FVector H0=FMath::Lerp(D,C,U0),H1=FMath::Lerp(D,C,U1);
+                    for (int32 J=1;J<Stops.Num();++J)
+                    {
+                        if (Stops[J]-Stops[J-1]<1.e-8) continue;
+                        const FVector P[]={FMath::Lerp(L0,H0,Stops[J-1]),FMath::Lerp(L1,H1,Stops[J-1]),FMath::Lerp(L1,H1,Stops[J]),FMath::Lerp(L0,H0,Stops[J])};
+                        Shaded.Quad(P[0],P[1],P[2],P[3],FLinearColor::White);
+                        for (int32 K=0;K<4;++K)
+                        {
+                            const float S=ShadeAt(P[K]);
+                            Shaded.C[Shaded.C.Num()-4+K]=FLinearColor(S,S,S,0.f);
+                        }
                     }
                 }
             }

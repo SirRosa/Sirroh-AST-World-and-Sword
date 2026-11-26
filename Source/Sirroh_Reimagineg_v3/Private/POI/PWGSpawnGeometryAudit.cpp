@@ -12,6 +12,7 @@
 #include "POI/POIShaft.h"
 #include "ProceduralMeshComponent.h"
 #include "Materials/Material.h"
+#include "Algo/BinarySearch.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Procedural_World_Generator/PWGProceduralTree.h"
 
@@ -118,11 +119,14 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             }
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
-            int32 ShadeMin=255,ShadeMax=0;
+            int32 ShadeMin=255,ShadeMax=0,BlackVertices=0;
+            TSet<uint8> ShadeLevels;
             for (const auto& Pair:G->UndergroundChunks)
             {
                 auto* Mesh=Pair.Value.Get(); if (!Mesh) continue;
                 TArray<float> Edges;
+                // Index quads by horizontal strip rather than rescanning the refined mask for every probe.
+                TMap<float,TArray<FVector4>> Strips;
                 for (int32 L=1;L<=4;++L)
                 {
                     const int32 S=G->SolidCutawaySectionBase+L-1;
@@ -135,6 +139,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     for (const auto& V:Part->ProcVertexBuffer)
                     {
                         ShadeMin=FMath::Min(ShadeMin,int32(V.Color.R)); ShadeMax=FMath::Max(ShadeMax,int32(V.Color.R));
+                        ShadeLevels.Add(V.Color.R); if (V.Color.R==0) ++BlackVertices;
                         TestTrue(TEXT("Cutaway shading is neutral"),V.Color.R==V.Color.G && V.Color.G==V.Color.B);
                     }
                     for (int32 V=0;V+3<Part->ProcVertexBuffer.Num();V+=4)
@@ -143,25 +148,21 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                         const auto& B=Part->ProcVertexBuffer[V+1].Position;
                         TestTrue(TEXT("Mask is outside the playable lanes"),A.Y < -G->Settings.LaneSpacing-100.f);
                         Edges.AddUnique(A.X); Edges.AddUnique(B.X); ++MaskQuads;
+                        const auto& C=Part->ProcVertexBuffer[V+2].Position;
+                        const auto& E=Part->ProcVertexBuffer[V+3].Position;
+                        Strips.FindOrAdd(float(A.X)).Add(FVector4(A.Z,B.Z,E.Z,C.Z));
+                        TestTrue(TEXT("Cutaway horizontal shading spacing <=20cm"),B.X-A.X<=20.01);
                     }
                 }
                 Edges.Sort();
                 auto Covered=[&](float X,float Z)
                 {
-                    for (int32 L=1;L<=4;++L)
-                    {
-                        const auto* Part=Mesh->GetProcMeshSection(G->SolidCutawaySectionBase+L-1);
-                        if (!Part) continue;
-                        for (int32 V=0;V+3<Part->ProcVertexBuffer.Num();V+=4)
-                        {
-                            const auto& A=Part->ProcVertexBuffer[V].Position; const auto& B=Part->ProcVertexBuffer[V+1].Position;
-                            const auto& C=Part->ProcVertexBuffer[V+2].Position; const auto& E=Part->ProcVertexBuffer[V+3].Position;
-                            if (X<=A.X || X>=B.X) continue;
-                            const float T=(X-A.X)/(B.X-A.X);
-                            // Shared material seams are covered by the adjoining quads as well.
-                            if (Z>=FMath::Lerp(A.Z,B.Z,T)-.01 && Z<=FMath::Lerp(E.Z,C.Z,T)+.01) return true;
-                        }
-                    }
+                    const int32 I=Algo::UpperBound(Edges,X)-1;
+                    if (I<0 || I+1>=Edges.Num()) return false;
+                    const auto* Strip=Strips.Find(Edges[I]); if (!Strip) return false;
+                    const double T=(X-Edges[I])/(Edges[I+1]-Edges[I]);
+                    for (const auto& Q:*Strip)
+                        if (Z>=FMath::Lerp(Q.X,Q.Y,T)-.01 && Z<=FMath::Lerp(Q.Z,Q.W,T)+.01) return true;
                     return false;
                 };
                 for (int32 I=0;I+1<Edges.Num();++I)
@@ -196,9 +197,10 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             TestTrue(TEXT("Audit contains actual cutaway quads and rooms"),MaskQuads>0 && OpenSamples>0 && SolidSamples>0);
             // Accept either linear or sRGB vertex conversion; verify genuine gradient and darker baseline.
             const FLinearColor Edge(.85f,.85f,.85f);
-            TestTrue(TEXT("Mask has distance shading"),ShadeMax-ShadeMin>30 && ShadeMin>0);
+            TestTrue(TEXT("Mask reaches exact black beyond the gradient"),ShadeMin==0 && BlackVertices>0);
+            TestTrue(TEXT("Mask has multiple distinct intermediate gradient levels"),ShadeLevels.Num()>=6);
             TestTrue(TEXT("Mask edge multiplier is approximately 85 percent of normal wall"),FMath::Abs(ShadeMax-int32(Edge.ToFColor(false).R))<=2 || FMath::Abs(ShadeMax-int32(Edge.ToFColor(true).R))<=2);
-            AddInfo(FString::Printf(TEXT("SOLID_SHADE vertex_min=%d vertex_max=%d"),ShadeMin,ShadeMax));
+            AddInfo(FString::Printf(TEXT("SOLID_SHADE vertex_min=%d vertex_max=%d levels=%d black_vertices=%d"),ShadeMin,ShadeMax,ShadeLevels.Num(),BlackVertices));
             AddInfo(FString::Printf(TEXT("SOLID_CUTAWAY quads=%d room_samples=%d shaft_samples=%d solid_samples=%d"),MaskQuads,OpenSamples,ShaftSamples,SolidSamples));
             // Exercise both domain changes and the no-frustum (debug/perspective) path.
             auto CheckVisibility=[&](bool bUnderground)
