@@ -141,6 +141,10 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
     bool bEnableDepthGrading = true;
 
+    /** Exact Stage 1 geometry and grading without changing the individual experiment controls. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bCompareStage1 = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="2000.0", Units="cm"))
     float DepthStart = 100.f;
 
@@ -285,7 +289,7 @@ struct FPWGVisualProfile
             && BackgroundAmbient == Other.BackgroundAmbient && AtmosphereColor == Other.AtmosphereColor
             && GameplayBrightness == Other.GameplayBrightness && GameplayContrast == Other.GameplayContrast && GameplayTint == Other.GameplayTint
             && bDisableBackgroundAmbient == Other.bDisableBackgroundAmbient && bVisualizeMasks == Other.bVisualizeMasks
-            && bEnableDepthGrading == Other.bEnableDepthGrading && DepthStart == Other.DepthStart && DepthRange == Other.DepthRange
+            && bCompareStage1 == Other.bCompareStage1 && bEnableDepthGrading == Other.bEnableDepthGrading && DepthStart == Other.DepthStart && DepthRange == Other.DepthRange
             && DepthBrightness == Other.DepthBrightness && DepthContrast == Other.DepthContrast
             && DepthDesaturation == Other.DepthDesaturation && DepthTintStrength == Other.DepthTintStrength
             && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers;
@@ -546,6 +550,8 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ActiveDepthMaterial;
     bool bTriedStylizedDepthAsset = false;
     bool bHasDepthPrototypeAsset = false;
+    float LastDepthLayerSpan=-1.f;
+    bool bLastDepthLayerActive=false;
     bool bProfileUniformsInitialized = false;
     FPWGVisualProfile LastProfileUniforms;
     FVector LastProfileOrigin = FVector::ZeroVector;

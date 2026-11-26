@@ -5,6 +5,9 @@
 #include "Sword/ProceduralSword.h"
 #include "PWGv2Mesh.h"
 #include "PWGv2DepthPrototype.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "POI/POIArtPool.h"
@@ -744,6 +747,8 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     // Append prototype sections after all existing POI sections. The old rear
     // sections remain intact for exact A/B; SolidEarth, cutaway and hulls are untouched.
     // EarthY is the physical cap: a deeper plan would be occluded by the opaque earth.
+    const double DepthBuildStart=FPlatformTime::Seconds();
+    int32 DepthVertices=0;
     auto& DepthBatch=DecorationChunks.FindOrAdd(Index);
     const double DepthSpan=double(EarthY)-260.0;
     if (bUnified && DepthSpan>=120.0)
@@ -756,8 +761,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             if (!Part || Part->ProcIndexBuffer.IsEmpty()) continue;
             const FProcMeshSection Source=*Part; // append invalidates source pointers
             UMaterialInterface* Material=Mesh->GetMaterial(S);
-            if (!Material || Material->GetBlendMode()!=BLEND_Opaque) continue;
-            int32 Section=Mesh->GetNumSections();
+            if (!Material || (Material->GetBlendMode()!=BLEND_Opaque && Material->GetBlendMode()!=BLEND_Masked)) continue;
+            int32 Section=FMath::Max(Mesh->GetNumSections(),SolidCutawaySectionBase+4);
+            DepthVertices+=Source.ProcVertexBuffer.Num();
             Mesh->SetProcMeshSection(Section,PWGDepthPrototype::BuildBacking(Source,DepthSpan));
             Mesh->SetMaterial(Section,Material);
             Mesh->SetMeshSectionVisible(Section,false);
@@ -769,12 +775,19 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                 PWGDepthPrototype::BuildFormation(Source,WorldData->Seed,Plan,DepthSpan,Form);
                 if (Form.V.IsEmpty()) continue;
                 Section=Mesh->GetNumSections();
+                DepthVertices+=Form.V.Num();
                 Form.Submit(Mesh,Section); Mesh->SetMaterial(Section,Material);
                 Mesh->SetMeshSectionVisible(Section,false);
                 DepthBatch.DepthPrototypePlans.Add(Section,Plan);
             }
         }
     }
+#if !UE_BUILD_SHIPPING
+    static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
+    if (bDepthQA)
+        UE_LOG(LogTemp,Display,TEXT("VF_DEPTH_CHUNK index=%d sections=%d vertices=%d span=%.1f ms=%.3f"),
+            Index,DepthBatch.DepthPrototypePlans.Num(),DepthVertices,DepthSpan,(FPlatformTime::Seconds()-DepthBuildStart)*1000.0);
+#endif
     Mesh->SetCollisionConvexMeshes(Hulls);
     Mesh->SetCanEverAffectNavigation(Hulls.Num()>0);
     UndergroundChunks.Add(Index,Mesh);

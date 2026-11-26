@@ -27,6 +27,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bRequested=FParse::Param(FCommandLine::Get(),TEXT("PWGVisualPOIQA"));
     static const bool bIsolation=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
     static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
+    static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
     auto* G=Cast<APWGv2Generator>(Generator);
     auto* PC=GetWorld()->GetFirstPlayerController();
@@ -37,7 +38,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         UE_LOG(LogTemp,Error,TEXT("VF_RENDER_FAIL %s"),Why);
         VisualProbeStep=-1; FPlatformMisc::RequestExit(false);
     };
-    if(G->WorldName!=TEXT("VF_POIProbe_20261126")) {Fail(TEXT("wrong sandbox slot"));return;}
+    if(G->WorldName!=(bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
     auto* Mover=Pawn->FindComponentByClass<UMoverComponent>();
     auto* Input=Pawn->FindComponentByClass<UPWGSidescrollerInputComponent>();
     auto FreezePawn=[&](bool bFreeze)
@@ -46,10 +47,12 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(Mover) Mover->SetComponentTickEnabled(!bFreeze);
         if(Input) Input->SetComponentTickEnabled(!bFreeze);
     };
-    auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false)
+    auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
     {
         VisualProfile=FPWGVisualProfile::DemoPreset(Preset);
-        VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks;
+        VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
+        VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
+        VisualProfile.bCompareStage1=!bDepthQA || bStage1;
         if(bLegacy)VisualProfile.Mode=EPWGVisualMode::Legacy;
         RefreshVisualProfile();
     };
@@ -78,7 +81,8 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     {
         if(Frame==1)
         {
-            bVisualProbeDisableMaskPass=(VisualProbeStep%2)==0;
+            bVisualProbeDisableMaskPass=!bDepthQA && (VisualProbeStep%2)==0;
+            if(bDepthQA) SetPreset(1,false,false,(VisualProbeStep%2)==0);
             RefreshVisualProfile();
             VisualProbeGPU.Reset(); VisualProbeCPU.Reset();
             VisualProbeLastFrame=FPlatformTime::Seconds();
@@ -99,6 +103,9 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             const float CPU50=Percentile(VisualProbeCPU,.5f),CPU95=Percentile(VisualProbeCPU,.95f);
             UE_LOG(LogTemp,Display,TEXT("VF_GPU scene=%s masks=%d actual=%d run=%d samples=%d gpu_median_ms=%.3f gpu_p95_ms=%.3f wall_median_ms=%.3f wall_p95_ms=%.3f"),
                 *VisualProbeLabel,!bVisualProbeDisableMaskPass,G->IsVisualMaskPassEnabled(),VisualProbeStep-20,VisualProbeGPU.Num(),GPU50,GPU95,CPU50,CPU95);
+            if(bDepthQA)
+                UE_LOG(LogTemp,Display,TEXT("VF_DEPTH_GPU scene=%s stage2=%d run=%d samples=%d gpu_median_ms=%.3f gpu_p95_ms=%.3f wall_median_ms=%.3f wall_p95_ms=%.3f"),
+                    *VisualProbeLabel,!VisualProfile.bCompareStage1,VisualProbeStep-20,VisualProbeGPU.Num(),GPU50,GPU95,CPU50,CPU95);
             if(VisualProbeStep==23)
             {
                 bVisualProbeDisableMaskPass=false;RefreshVisualProfile();
@@ -121,8 +128,10 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(VisualProfile.Mode==EPWGVisualMode::Underground_Stylized &&
             (!StylizedDepthMaterial || ActiveDepthMaterial!=StylizedDepthMaterial || ProfileMix<.999f))
         {Fail(TEXT("semantic material not active"));return false;}
+        if(bDepthQA && !bHasDepthPrototypeAsset){Fail(TEXT("Depth prototype asset not loaded"));return false;}
+        if(bDepthQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -177,7 +186,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             float W=0,H=0;FVector P;FRotator R;
             if(GetView(P,R,W,H))
                 G->UpdateGameplayView(FTransform(FRotator(0,90,0),VisualProbeFocus+FVector(0,-1840,0)),W,W/FMath::Max(H,1.f));
-            SetPreset(1,false,true);
+            SetPreset(1,false,!bDepthQA,bDepthQA);
             break;
         }
         case 2:
@@ -186,13 +195,13 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             // Recompute culling for the actual settled, locked view (not the old follow target).
             G->UpdateGameplayView(FTransform(VisualProbeRotation,VisualProbeCamera),VisualProbeWidth,VisualProbeWidth/FMath::Max(H,1.f));
             VisualProbePawn=Pawn->GetActorLocation();
-            if(!Capture(TEXT("Legacy")))return;
+            if(!Capture(bDepthQA?TEXT("Stage1"):TEXT("Legacy")))return;
             break;
         }
         case 3: SetPreset(1);break;
-        case 4: if(!Capture(TEXT("Atmospheric")))return;break;
+        case 4: if(!Capture(bDepthQA?TEXT("Stage2"):TEXT("Atmospheric")))return;break;
         case 5: SetPreset(1,true);break;
-        case 6: if(!Capture(TEXT("Masks")))return;break;
+        case 6: if(!Capture(bDepthQA?TEXT("DepthMasks"):TEXT("Masks")))return;break;
         case 7:
             if(bIsolation)
             {

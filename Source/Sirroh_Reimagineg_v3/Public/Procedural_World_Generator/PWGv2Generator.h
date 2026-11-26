@@ -41,7 +41,7 @@ public:
     bool HasGlobalDepthAtmosphere() const;
     void SetVisualMaskPassEnabled(bool bEnabled);
     void SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking);
-    bool IsDepthPrototypeActive() const { return bDepthPrototypeActive && BackgroundAuditIsolation==0; }
+    bool IsDepthPrototypeActive() const { return bUndergroundView && bDepthPrototypeActive && BackgroundAuditIsolation==0; }
     // Reserved stencil roles for this pass, independent of physical lane.
     static constexpr int32 VisualRear=201;
     static constexpr int32 VisualCutaway=202;
