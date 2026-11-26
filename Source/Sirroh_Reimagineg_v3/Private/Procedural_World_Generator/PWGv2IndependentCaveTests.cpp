@@ -1,4 +1,5 @@
 #include "PWGv2IndependentCave.h"
+#include "PWGv2GeologicalCave.h"
 #include "PWG/PWGEnvironmentV2.h"
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
@@ -45,6 +46,24 @@ bool FPWGIndependentCaveTest::RunTest(const FString&)
         for(const auto& I:X)
         {
             TestTrue(TEXT("Instance recipe stays within depth plan"),(I.Centre.Y-I.Extent.Y-165.)/2200.>=Min[I.Plan] && (I.Centre.Y+I.Extent.Y-165.)/2200.<Max[I.Plan]);
+        }
+    }
+    {
+        FPWGv2MeshBuffers A[4],B[4];
+        PWGGeologicalCave::Build(A,123,0,0,800,1520,400,855,5000,165,3000);
+        PWGGeologicalCave::Build(B,123,0,0,800,1520,400,855,5000,165,3000);
+        const double Min[4]={0,.23,.51,.80},Max[4]={.23,.51,.80,1.03};
+        for(int32 I=0;I<4;++I)
+        {
+            TestTrue(TEXT("Geological band deterministic and nonempty"),!A[I].V.IsEmpty() && A[I].V==B[I].V && A[I].T==B[I].T);
+            for(const auto& V:A[I].V)if((V.Y-165.)/3000.<Min[I]||(V.Y-165.)/3000.>=Max[I])
+            {AddError(TEXT("Geological volume escapes depth band"));break;}
+            PWGGeologicalCave::FSection S{0,400,1520,855,165,3000,12.,I};
+            for(int32 X=-760;X<=760;X+=20)
+            {
+                const auto O=S.Opening(X);
+                TestTrue(TEXT("Floor and vault are attached to outer ground/roof"),S.Solid(X,O.X-1.)>0. && S.Solid(X,O.Y+1.)>0.);
+            }
         }
     }
     FPWGVisualProfile P=FPWGVisualProfile::DemoPreset(3);

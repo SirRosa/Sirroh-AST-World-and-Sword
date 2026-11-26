@@ -185,7 +185,7 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> CaveReferenceInstances;
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> CaveReferenceInstanceMaterials;
     TArray<int32> CaveReferenceInstancePlans;
-    bool bCaveReferenceHybrid=false;
+    bool bCaveReferenceHybrid=false, bCaveReferenceGeological=false;
     void ClearCaveReferenceInstances();
     FVector CaveReferenceAnchor=FVector::ZeroVector;
     float CaveReferenceWidth=0.f, CaveReferenceHeight=0.f, CaveReferenceHalfWidth=0.f;
@@ -195,7 +195,7 @@ private:
     float CaveReferenceFlatAlbedo=-1.f;
     int32 CaveReferenceLastDebug=-1;
     UMaterialInstanceDynamic* CreateCaveReferenceMaterial(int32 Layer);
-    bool BuildCaveReference(const FVector& Pawn,float Depth,bool bHybrid);
+    bool BuildCaveReference(const FVector& Pawn,float Depth,bool bHybrid,bool bGeological);
     bool SuppressCaveReferenceOriginal(const FPWGv2DecorationBatch& Batch,int32 Section) const;
     int32 DepthPrototypeFormationCount=2;
     bool bDepthPrototypeNear=true, bDepthPrototypeMid=true, bDepthPrototypeBacking=true;

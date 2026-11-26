@@ -30,6 +30,8 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
     static const bool bCaveQA=FParse::Param(FCommandLine::Get(),TEXT("PWGCaveReferenceQA"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
+    static const bool bGeoQA=bCaveQA && FParse::Param(FCommandLine::Get(),TEXT("PWGGeologicalArtQA"));
+    if(bGeoQA && VisualProbeStep==0 && VisualProbeFrames==0)VisualProbeScene=7;
     auto* G=Cast<APWGv2Generator>(Generator);
     auto* PC=GetWorld()->GetFirstPlayerController();
     APawn* Pawn=PC?PC->GetPawn():nullptr;
@@ -48,11 +50,11 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(Mover) Mover->SetComponentTickEnabled(!bFreeze);
         if(Input) Input->SetComponentTickEnabled(!bFreeze);
     };
-    auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
+    auto SetPreset=[this,bGeoQA,bCaveQA,bDepthQA](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
     {
         VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
         VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
-        if(bCaveQA){VisualProfile.bCaveReference=true; if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
+        if(bCaveQA){VisualProfile.bCaveReference=true; VisualProfile.bCaveGeological=bGeoQA; if(bGeoQA)VisualProfile.CaveVisualDepthMetres=30.f; else if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
         VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
         VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
         VisualProfile.bCompareStage1=!bDepthQA || bStage1;
@@ -74,7 +76,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             VisualProfile.bCaveReference=false; RefreshVisualProfile();
             G->ResetCaveReference();
             // Existing tunnel, shaft, POI, larger natural chamber, deeper cave.
-            VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?7:VisualProbeScene==7?8:9;
+            VisualProbeScene=bGeoQA?9:VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?7:VisualProbeScene==7?8:9;
         }
         else ++VisualProbeScene;
         if((bCaveQA && VisualProbeScene>8) || (!bCaveQA && VisualProbeScene>(bIsolation||bEnclosed?3:6)))
@@ -142,7 +144,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient"):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -214,6 +216,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         case 5: SetPreset(1,true);break;
         case 6: if(!Capture(bDepthQA?TEXT("DepthMasks"):TEXT("Masks")))return;break;
         case 7:
+            if(bGeoQA){SetPreset(1);VisualProfile.CaveTextureAmbient=0.f;RefreshVisualProfile();Advance(60);return;}
             if(bCaveQA){SetPreset(1);VisualProfile.bShowCaveMid=false;VisualProfile.bShowCaveFar=false;VisualProfile.bShowCaveClosure=false;RefreshVisualProfile();Advance(40);return;}
             if(bIsolation)
             {
@@ -260,9 +263,10 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             break;
         }
         case 13: if(!Capture(TEXT("TorchDark")))return;break;
-        case 14: SetPreset(1);break;
+        case 14: if(bGeoQA){NextScene();return;} SetPreset(1);break;
         case 15: if(!Capture(TEXT("TorchAtmospheric")))return;break;
         case 16:
+            if(bGeoQA){NextScene();return;}
             if(auto* Torch=VisualProbeTorch.Get())Torch->Destroy();
             VisualProbeTorch.Reset(); SetPreset(1);
             PC->ConsoleCommand(TEXT("r.VSync 0"));PC->ConsoleCommand(TEXT("t.MaxFPS 0"));
@@ -313,6 +317,17 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             SetPreset(1);
             if(VisualProbeScene==0 || VisualProbeScene==7){Advance(11);return;}
             NextScene();return;
+        // One locked chamber, no multi-scene or performance sweep.
+        case 60: if(!Capture(TEXT("AmbientOff")))return;break;
+        case 61: SetPreset(1);VisualProfile.Strength=0.f;RefreshVisualProfile();break;
+        case 62: if(!Capture(TEXT("RawLit")))return;break;
+        case 63: SetPreset(1);VisualProfile.CaveMaterialDebug=1;RefreshVisualProfile();break;
+        case 64: if(!Capture(TEXT("BaseColor")))return;break;
+        case 65: SetPreset(1);VisualProfile.CaveMaterialDebug=2;RefreshVisualProfile();break;
+        case 66: if(!Capture(TEXT("Geometry")))return;break;
+        case 67: SetPreset(0);break;
+        case 68: if(!Capture(TEXT("Dark")))return;break;
+        case 69: Advance(11);return;
         case 25:
             UE_LOG(LogTemp,Display,TEXT("VF_LANE_RESULT targetY=%.2f actualY=%.2f active=%d reached=%d"),
                 VisualProbeLaneY,Pawn->GetActorLocation().Y,Input?Input->IsLaneMoveActive():false,FMath::Abs(VisualProbeLaneY-Pawn->GetActorLocation().Y)<5.f);

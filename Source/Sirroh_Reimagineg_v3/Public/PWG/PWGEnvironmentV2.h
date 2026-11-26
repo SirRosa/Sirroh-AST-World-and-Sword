@@ -222,6 +222,8 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bCaveHybridFormations=true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bCaveGeological=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bUseReliefCheckpoint=false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="5.0",ClampMax="50.0",Units="m"))
     float CaveVisualDepthMetres=22.f;
@@ -273,10 +275,11 @@ struct FPWGVisualProfile
             P.bCaveReference=true; P.bUseReliefCheckpoint=false;
             P.AtmosphereColor=FLinearColor(.39f,.36f,.43f,1.f);
             P.BackgroundAmbient=.085f; P.FogStrength=.48f;
-            P.CaveNear=FPWGCavePlanGrade(.98f,1.08f,.78f,.05f,1.f,FLinearColor(.95f,.91f,1.f,1));
-            P.CaveMid=FPWGCavePlanGrade(1.05f,1.02f,.55f,.30f,.72f,FLinearColor(.98f,.94f,1.f,1));
-            P.CaveFar=FPWGCavePlanGrade(1.17f,.92f,.30f,.66f,.27f,FLinearColor(.98f,.96f,1.f,1));
-            P.CaveClosure=FPWGCavePlanGrade(1.30f,.90f,.12f,.95f,.025f,FLinearColor::White);
+            P.CaveTextureAmbient=.68f;
+            P.CaveNear=FPWGCavePlanGrade(.82f,1.12f,.62f,.035f,1.f,FLinearColor(.96f,.93f,1.f,1));
+            P.CaveMid=FPWGCavePlanGrade(.94f,1.02f,.45f,.19f,.70f,FLinearColor(.99f,.97f,1.f,1));
+            P.CaveFar=FPWGCavePlanGrade(1.12f,.94f,.26f,.49f,.31f,FLinearColor(.98f,.97f,1.f,1));
+            P.CaveClosure=FPWGCavePlanGrade(1.08f,.92f,.12f,.81f,.045f,FLinearColor::White);
         }
         return P;
     }

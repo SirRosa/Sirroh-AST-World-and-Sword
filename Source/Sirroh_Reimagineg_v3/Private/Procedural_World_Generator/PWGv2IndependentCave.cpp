@@ -1,4 +1,5 @@
 #include "PWGv2IndependentCave.h"
+#include "PWGv2GeologicalCave.h"
 #include "Procedural_World_Generator/PWGv2Generator.h"
 #include "PWG/PWGEnvironmentV2.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -25,9 +26,10 @@ void APWGv2Generator::ResetCaveReference()
     if(bWasActive) for(const auto& Pair:UndergroundChunks) ApplyChunkLayerVisibility(Pair.Key);
 }
 
-bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bHybrid)
+bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bHybrid,bool bGeological)
 {
     if(!WorldData || !bCaveReferencePinned) return false;
+    bHybrid=bHybrid && !bGeological;
     const int32 Layer=LayerAt(Pawn);
     if(Layer<=0 || !WorldData->Layers.IsValidIndex(Layer-1)) return false;
     const double Beg=FPlatformTime::Seconds();
@@ -51,7 +53,8 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
         {UE_LOG(LogTemp,Error,TEXT("VF_CAVE_HYBRID missing/degenerate %s"),MeshPaths[K]);return false;}
     }
     ClearCaveReferenceInstances();
-    if(bCaveReferenceHybrid!=bHybrid){CaveReferenceMaterials.Reset();bCaveReferenceHybrid=bHybrid;}
+    if(bCaveReferenceHybrid!=bHybrid || bCaveReferenceGeological!=bGeological)
+    {CaveReferenceMaterials.Reset();bCaveReferenceHybrid=bHybrid;bCaveReferenceGeological=bGeological;}
     for(float& V:CaveReferenceTextures)V=-1.f;
     CaveReferenceFlatAlbedo=-1.f; CaveReferenceLastDebug=-1;
     // Materials are created once per reference, not per rock. Asset failure leaves Stage 1 visible.
@@ -71,7 +74,9 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
     CaveReferenceStart=FMath::Max(125.f,Settings.LaneSpacing+65.f);
     CaveReferenceDepth=Depth;
     FPWGv2MeshBuffers B[4]; TArray<PWGIndependentCave::FHybridInstance> Instances;
-    PWGIndependentCave::Build(B,Seed,CaveReferenceAnchor.X,Floor,Roof,CaveReferenceWidth,
+    if(bGeological)PWGGeologicalCave::Build(B,Seed,CaveReferenceAnchor.X,Floor,Roof,CaveReferenceWidth,
+        CaveReferenceAnchor.Z,CaveReferenceHeight,CaveReferenceHalfWidth,CaveReferenceStart,Depth);
+    else PWGIndependentCave::Build(B,Seed,CaveReferenceAnchor.X,Floor,Roof,CaveReferenceWidth,
         CaveReferenceAnchor.Z,CaveReferenceHeight,CaveReferenceHalfWidth,CaveReferenceStart,Depth,PWGIndependentCave::FRecipe(),bHybrid?&Instances:nullptr);
     if(!IsValid(CaveReferenceMesh))
     {
@@ -127,6 +132,7 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
         const FVector P=I.Centre-Q.RotateVector(Box.GetCenter()*Scale);
         C->AddInstance(FTransform(Q,P,Scale),false);++Added;
     }
+    UE_LOG(LogTemp,Display,TEXT("VF_CAVE_GEOLOGICAL enabled=%d instances=%d"),bGeological,Added);
     UE_LOG(LogTemp,Display,TEXT("VF_CAVE_HYBRID enabled=%d instances=%d batches=%d"),bHybrid,Added,CaveReferenceInstances.Num());
     UE_LOG(LogTemp,Display,TEXT("VF_CAVE_REFERENCE seed=%d layer=%d depth_cm=%.0f floor=%.1f roof=%.1f width=%.1f vertices=%d triangles=%d ms=%.3f"),
         Seed,Layer,Depth,Floor,Roof,CaveReferenceWidth,Vertices,Triangles,(FPlatformTime::Seconds()-Beg)*1000.);
@@ -165,11 +171,11 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
         && FMath::Abs(LocalView.X-CaveReferenceAnchor.X)<=CaveReferenceWidth*.22
         && FMath::Abs(LocalView.Z-CaveReferenceAnchor.Z)<=CaveReferenceHeight*.28
         && Width<=CaveReferenceWidth*1.15f && Height<=CaveReferenceHeight*1.15f;
-    if(bWanted && (!IsValid(CaveReferenceMesh) || CaveReferenceDepth!=Profile.CaveVisualDepthMetres*100.f || bCaveReferenceHybrid!=Profile.bCaveHybridFormations))
+    if(bWanted && (!IsValid(CaveReferenceMesh) || CaveReferenceDepth!=Profile.CaveVisualDepthMetres*100.f || bCaveReferenceGeological!=Profile.bCaveGeological || bCaveReferenceHybrid!=(Profile.bCaveHybridFormations && !Profile.bCaveGeological)))
     {
         // Do not retry missing assets on every tick. Toggling the reference resets the latch.
         if(CaveReferenceDepth<0.f) bWanted=false;
-        else if(!BuildCaveReference(Pawn,Profile.CaveVisualDepthMetres*100.f,Profile.bCaveHybridFormations))
+        else if(!BuildCaveReference(Pawn,Profile.CaveVisualDepthMetres*100.f,Profile.bCaveHybridFormations,Profile.bCaveGeological))
         {
             CaveReferenceDepth=-1.f; bWanted=false;
             UE_LOG(LogTemp,Error,TEXT("VF_CAVE_REFERENCE failed to build; Stage 1 retained"));
