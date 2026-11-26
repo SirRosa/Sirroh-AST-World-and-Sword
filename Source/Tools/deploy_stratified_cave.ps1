@@ -73,51 +73,7 @@ try{
   "$root/M_PWGv2_DepthAtmosphere_DepthLayersPrototype.uasset"='0CCAB2019FD82284B0AC2E4115F2D5BEB9FBE45F1970902818A3AD94377DB31A'
  }
  foreach($item in $checkpoint.GetEnumerator()){if($protected[$item.Key] -ne $item.Value){throw "Stage 1 asset mismatch: $($item.Key)"}}
- if(!(Select-String -Path (Join-Path $p 'Saved/ChatGPT/IndependentCaveReference_20261126/result_organic.txt') -Pattern '^COMPLETE=PASS
- if((Get-FileHash (Join-Path $p $newAsset)).Hash -ne '287249DFBEE615AED918F5EF9EB1C5AB5D90064E4977AB12C9CA8083E64B2C6C'){throw 'Reference PP mismatch'}
- if((Get-FileHash (Join-Path $p $newRock)).Hash -ne 'C3F137208F657E2969D2127A594AE1BE3CF55691E06AE21F07A562EA3AD7EEA8'){throw 'Reference rock mismatch'}
- $protected[$newAsset]=(Get-FileHash (Join-Path $p $newAsset)).Hash
- $protected[$newRock]=(Get-FileHash (Join-Path $p $newRock)).Hash
- CheckSources
- foreach($x in $entries){
-   $local=Join-Path $p $x.Path; $bak=Join-Path $backup $x.Path; $st=Join-Path $stage $x.Path
-   New-Item -ItemType Directory -Path (Split-Path $bak),(Split-Path $st) -Force|Out-Null
-   Copy-Item $local $bak
-   if((GitHash $bak) -ne $x.Old){throw "Backup mismatch $($x.Path)"}
-   Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/SirRosa/Sirroh-AST-World-and-Sword/$commit/$($x.Path)" -OutFile $st
-   if((GitHash $st) -ne $x.New){throw "Staging mismatch $($x.Path)"}
- }
- CheckNoEditor;CheckOriginals;CheckSources
- foreach($x in $entries){
-   $local=Join-Path $p $x.Path;Copy-Item (Join-Path $stage $x.Path) $local -Force
-   if((GitHash $local) -ne $x.New){throw "Deploy mismatch $($x.Path)"}
- }
- Note 'STRATIFIED_DEPLOYED=PASS'
- Note 'BUILD=START'
- $ErrorActionPreference='Continue'
- & "$e\Engine\Build\BatchFiles\Build.bat" AST_V1_18Editor Win64 Development "-Project=$u" -WaitMutex -NoHotReloadFromIDE 2>&1 | Out-File -Encoding utf8 (Join-Path $d 'stratified_build.log')
- $rc=$LASTEXITCODE
- $ErrorActionPreference='Stop';Note "BUILD_EXIT=$rc";if($rc -ne 0){throw 'Build failed'}
- CheckOriginals;CheckNoEditor
- Note 'TESTS=START'
- $ErrorActionPreference='Continue'
- & "$e\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" $u '-ExecCmds=Automation RunTests Sirroh.PWG.IndependentCave+Sirroh.PWG.DepthPrototype+Sirroh.PWG.VisualProfile+Sirroh.PWG.SpawnGeometryAudit+Sirroh.PWG.StreamingCost+Sirroh.POI.RoomChains' '-TestExit=Automation Test Queue Empty' "-ReportExportPath=$d/stratified_test_report" -unattended -nop4 -nullrhi -nosplash -stdout -FullStdOutLogOutput 2>&1 | Out-File -Encoding utf8 (Join-Path $d 'stratified_test.log')
- $rc=$LASTEXITCODE
- $ErrorActionPreference='Stop';Note "TEST_EXIT=$rc"
- $testLines=Select-String -Path (Join-Path $d 'resume_test.log') -Pattern 'Test Completed|Found [0-9]+ automation tests|No automation tests'
- foreach($line in $testLines){Note $line.Line}
- if($rc -ne 0 -or (Select-String -Path (Join-Path $d 'resume_test.log') -Pattern 'Result=\{Fail\}' -Quiet)){throw 'Technical tests failed'}
- foreach($n in @('IndependentCave','DepthPrototype','VisualProfile','SpawnGeometryAudit','StreamingCost','RoomChains')){if(!($testLines | Where-Object {$_.Line -match 'Result=\{Success\}' -and $_.Line -match $n})){throw "No verified success for $n"}}
- Note 'TECHNICAL_TESTS=PASS'
-
- Render 'Render' @() @('Tunnel','Shaft','POI','Chamber','DeepCave') @('Stage1','Composition','DepthMasks','NearOnly','MidOnly','FarOnly','ClosureOnly','Dark','RawLit','BaseColor','Normals','UV')
-
- foreach($scene in @('Tunnel','Chamber')){foreach($suffix in @('TorchDark','TorchAtmospheric')){if(!(Test-Path (Join-Path $d "Render/${scene}_${suffix}.png"))){throw "Missing torch render $scene $suffix"}}}
- CheckOriginals
- Note 'ORIGINALS_UNCHANGED=PASS'
- Note 'COMPLETE=PASS'
-}catch{Note "FAILED=$($_.Exception.Message)";exit 1}
- -Quiet)){throw 'Organic reference not verified'}
+ if(!(Select-String -Path (Join-Path $p 'Saved/ChatGPT/IndependentCaveReference_20261126/result_organic.txt') -Pattern '^COMPLETE=PASS$' -Quiet)){throw 'Organic reference not verified'}
  $stratified="$root/M_PWGv2_StratifiedCaveRock.uasset"
  if((Get-FileHash (Join-Path $p $stratified)).Hash -ne '919E582FDC2881201036AD019EE81370BC6B4954743188272E5F95E8E94A49A1'){throw 'Stratified rock mismatch'}
  $protected[$stratified]=(Get-FileHash (Join-Path $p $stratified)).Hash
@@ -151,14 +107,15 @@ try{
  & "$e\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" $u '-ExecCmds=Automation RunTests Sirroh.PWG.IndependentCave+Sirroh.PWG.DepthPrototype+Sirroh.PWG.VisualProfile+Sirroh.PWG.SpawnGeometryAudit+Sirroh.PWG.StreamingCost+Sirroh.POI.RoomChains' '-TestExit=Automation Test Queue Empty' "-ReportExportPath=$d/stratified_test_report" -unattended -nop4 -nullrhi -nosplash -stdout -FullStdOutLogOutput 2>&1 | Out-File -Encoding utf8 (Join-Path $d 'stratified_test.log')
  $rc=$LASTEXITCODE
  $ErrorActionPreference='Stop';Note "TEST_EXIT=$rc"
- $testLines=Select-String -Path (Join-Path $d 'resume_test.log') -Pattern 'Test Completed|Found [0-9]+ automation tests|No automation tests'
+ $testLines=Select-String -Path (Join-Path $d 'stratified_test.log') -Pattern 'Test Completed|Found [0-9]+ automation tests|No automation tests'
  foreach($line in $testLines){Note $line.Line}
- if($rc -ne 0 -or (Select-String -Path (Join-Path $d 'resume_test.log') -Pattern 'Result=\{Fail\}' -Quiet)){throw 'Technical tests failed'}
+ if($rc -ne 0 -or (Select-String -Path (Join-Path $d 'stratified_test.log') -Pattern 'Result=\{Fail\}' -Quiet)){throw 'Technical tests failed'}
  foreach($n in @('IndependentCave','DepthPrototype','VisualProfile','SpawnGeometryAudit','StreamingCost','RoomChains')){if(!($testLines | Where-Object {$_.Line -match 'Result=\{Success\}' -and $_.Line -match $n})){throw "No verified success for $n"}}
  Note 'TECHNICAL_TESTS=PASS'
 
  Render 'Render' @() @('Tunnel','Shaft','POI','Chamber','DeepCave') @('Stage1','Composition','DepthMasks','NearOnly','MidOnly','FarOnly','ClosureOnly','Dark','RawLit','BaseColor','Normals','UV')
 
+ foreach($scene in @('Tunnel','Chamber')){foreach($suffix in @('TorchDark','TorchAtmospheric')){if(!(Test-Path (Join-Path $d "Render/${scene}_${suffix}.png"))){throw "Missing torch render $scene $suffix"}}}
  CheckOriginals
  Note 'ORIGINALS_UNCHANGED=PASS'
  Note 'COMPLETE=PASS'
