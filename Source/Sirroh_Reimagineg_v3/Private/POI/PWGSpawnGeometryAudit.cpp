@@ -115,6 +115,76 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     }
                 }
             }
+            // Check actual foreground geometry, not merely component visibility.
+            int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
+            for (const auto& Pair:G->UndergroundChunks)
+            {
+                auto* Mesh=Pair.Value.Get(); if (!Mesh) continue;
+                TArray<float> Edges;
+                for (int32 L=1;L<=4;++L)
+                {
+                    const int32 S=G->SolidCutawaySectionBase+L-1;
+                    const auto* Part=Mesh->GetProcMeshSection(S);
+                    if (!Part || Part->ProcVertexBuffer.IsEmpty()) continue;
+                    TestFalse(TEXT("Solid cutaway has no section collision"),Part->bEnableCollision);
+                    TestTrue(TEXT("Solid cutaway uses layer wall material"),Mesh->GetMaterial(S)==G->WallMaterial(L));
+                    for (int32 V=0;V+3<Part->ProcVertexBuffer.Num();V+=4)
+                    {
+                        const auto& A=Part->ProcVertexBuffer[V].Position;
+                        const auto& B=Part->ProcVertexBuffer[V+1].Position;
+                        TestTrue(TEXT("Mask is outside the playable lanes"),A.Y < -G->Settings.LaneSpacing-100.f);
+                        Edges.AddUnique(A.X); Edges.AddUnique(B.X); ++MaskQuads;
+                    }
+                }
+                Edges.Sort();
+                auto Covered=[&](float X,float Z)
+                {
+                    for (int32 L=1;L<=4;++L)
+                    {
+                        const auto* Part=Mesh->GetProcMeshSection(G->SolidCutawaySectionBase+L-1);
+                        if (!Part) continue;
+                        for (int32 V=0;V+3<Part->ProcVertexBuffer.Num();V+=4)
+                        {
+                            const auto& A=Part->ProcVertexBuffer[V].Position; const auto& B=Part->ProcVertexBuffer[V+1].Position;
+                            const auto& C=Part->ProcVertexBuffer[V+2].Position; const auto& E=Part->ProcVertexBuffer[V+3].Position;
+                            if (X<=A.X || X>=B.X) continue;
+                            const float T=(X-A.X)/(B.X-A.X);
+                            if (Z>FMath::Lerp(A.Z,B.Z,T)+1 && Z<FMath::Lerp(E.Z,C.Z,T)-1) return true;
+                        }
+                    }
+                    return false;
+                };
+                for (int32 I=0;I+1<Edges.Num();++I)
+                {
+                    const float A=Edges[I],B=Edges[I+1],X=(A+B)*.5f;
+                    auto Floor=[&](int32 L){return (G->LayerFloor(L,A)+G->LayerFloor(L,B))*.5f;};
+                    auto Roof=[&](int32 L){return (G->LayerCeiling(L,A)+G->LayerCeiling(L,B))*.5f;};
+                    TestTrue(TEXT("Sky is masked above underground"),Covered(X,Floor(0)+5000.f));
+                    TestTrue(TEXT("Void below deepest layer is masked"),Covered(X,Floor(4)-5000.f));
+                    SolidSamples+=2;
+                    for (int32 L=1;L<=4;++L)
+                    {
+                        if (L==1 && G->RegionAt(X).Definition.EntranceStyle==EPWGv2EntranceStyle::None) continue;
+                        TestFalse(TEXT("Room interior remains open"),Covered(X,(Floor(L)+Roof(L))*.5f)); ++OpenSamples;
+                        if (L<=1) continue;
+                        const float Z=(Roof(L)+Floor(L-1))*.5f;
+                        bool bPassage=false;
+                        for (const auto& P:D->Portals)
+                            if (P.UpperLayer<L && P.LowerLayer>=L && FMath::Abs(X-P.X)<P.Width*.5f) bPassage=true;
+                        // Test ordinary inter-floor gaps, away from missing first-layer regions.
+                        if (!bPassage && Floor(L-1)>Roof(L)+20.f && !(L==2 && G->RegionAt(X).Definition.EntranceStyle==EPWGv2EntranceStyle::None))
+                        { TestTrue(TEXT("Solid gap between rooms is masked"),Covered(X,Z)); ++SolidSamples; }
+                    }
+                    for (const auto& P:D->Portals)
+                        if (FMath::Abs(X-P.X)<P.Width*.5f && P.UpperLayer>=0 && P.LowerLayer<=4 && P.UpperLayer<P.LowerLayer)
+                        {
+                            const float Low=Floor(P.LowerLayer),High=Floor(P.UpperLayer);
+                            if (High>Low+20.f) { TestFalse(TEXT("Shaft interior remains open"),Covered(X,(Low+High)*.5f)); ++ShaftSamples; }
+                        }
+                }
+            }
+            TestTrue(TEXT("Audit contains actual cutaway quads and rooms"),MaskQuads>0 && OpenSamples>0 && SolidSamples>0);
+            AddInfo(FString::Printf(TEXT("SOLID_CUTAWAY quads=%d room_samples=%d shaft_samples=%d solid_samples=%d"),MaskQuads,OpenSamples,ShaftSamples,SolidSamples));
             // Exercise both domain changes and the no-frustum (debug/perspective) path.
             auto CheckVisibility=[&](bool bUnderground)
             {
@@ -157,6 +227,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                                 ++Earth;
                                 TestTrue(TEXT("Solid earth remains visible in both domains"),Mesh->IsMeshSectionVisible(S));
                             }
+                            else if (G->IsSolidCutawaySection(S)) TestTrue(TEXT("Solid foreground only underground"),Mesh->IsMeshSectionVisible(S)==bUnderground);
                             else TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceVisibleUndergroundSection(S)));
                         }
                 }

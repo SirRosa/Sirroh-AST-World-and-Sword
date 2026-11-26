@@ -113,4 +113,7 @@ Użytkownik oczekuje pracy, nie wielokrotnego opisywania planu ani meldunków o 
 
 Zadanie jest gotowe do testów użytkownika dopiero po zapisaniu zweryfikowanego commita, wdrożeniu właściwych plików, udanej kompilacji i adekwatnych dostępnych testach. Gdy coś blokuje pracę, podaj dokładną przyczynę, co zostało wykonane i co nie jest zweryfikowane. Nie deklaruj, że efekt wizualny działa, jeśli sprawdzono jedynie testy headless.
 
+- W każdym raporcie końcowym jednoznacznie napisz, czy do testowania zmian trzeba utworzyć nowy świat, czy wystarczy wczytać istniejący zapis (oraz czy konieczny jest restart gry). Jeśli nie masz pewności, zaznacz to.
+- Na bieżąco aktualizuj AGENTS.md o trwałe, użyteczne ustalenia, powtarzalne problemy i zweryfikowane rozwiązania. Nie zapisuj przejściowych logów, drobnych iteracji ani redundantnych informacji; dokument ma pozostać zwięzłą instrukcją, nie kroniką rozmów.
+
 **Jeśli rozumiesz zasady pracy, zapytaj, na czym polega twoje zadanie, jeśli jeszcze go nie otrzymałeś.**

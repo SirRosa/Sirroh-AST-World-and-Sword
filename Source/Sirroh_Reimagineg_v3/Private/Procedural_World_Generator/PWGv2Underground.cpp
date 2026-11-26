@@ -202,6 +202,74 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         for (float Edge:{Pos.X-Row.Width*.5f,Pos.X+Row.Width*.5f}) if (Edge>Start && Edge<End) Samples.AddUnique(Edge);
     }
     Samples.Sort();
+    // A fixed, collision-free cross-section at the camera side. Fill only solid strata;
+    // the union of actual rooms and shaft passages remains open on every playable lane.
+    // Never use the far earth backdrop as this mask (it is needed on the surface).
+    FPWGv2MeshBuffers SolidCutaway[4];
+    const float CutawayY=-Settings.LaneSpacing-115.f;
+    struct FOpenBand
+    {
+        float Low0,Low1,High0,High1;
+        int32 LowLayer,HighLayer;
+    };
+    auto FillSolid=[&](int32 Layer,float X0,float X1,float Low0,float Low1,float High0,float High1)
+    {
+        if (High0<=Low0 && High1<=Low1) return;
+        High0=FMath::Max(High0,Low0); High1=FMath::Max(High1,Low1);
+        SolidCutaway[FMath::Clamp(Layer,1,4)-1].Quad(
+            FVector(X0,CutawayY,Low0),FVector(X1,CutawayY,Low1),
+            FVector(X1,CutawayY,High1),FVector(X0,CutawayY,High0),FLinearColor(0.65f,0.65f,0.65f));
+    };
+    for (int32 I=0;I<Samples.Num()-1;++I)
+    {
+        const float X0=Samples[I],X1=Samples[I+1],Mid=(X0+X1)*.5f;
+        TArray<FOpenBand,TInlineAllocator<8>> Open;
+        float Floors[5][2],Roofs[5][2];
+        Floors[0][0]=Height(X0); Floors[0][1]=Height(X1);
+        for (int32 L=1;L<=4;++L)
+        {
+            Floors[L][0]=LayerFloor(L,X0); Floors[L][1]=LayerFloor(L,X1);
+            Roofs[L][0]=LayerCeiling(L,X0); Roofs[L][1]=LayerCeiling(L,X1);
+            if (L==1 && RegionAt(Mid).Definition.EntranceStyle==EPWGv2EntranceStyle::None) continue;
+            Open.Add({Floors[L][0],Floors[L][1],Roofs[L][0],Roofs[L][1],L,L});
+        }
+        for (const auto& P:WorldData->Portals)
+        {
+            if (P.UpperLayer<0 || P.LowerLayer>4 || P.UpperLayer>=P.LowerLayer || FMath::Abs(Mid-P.X)>=P.Width*.5f) continue;
+            const int32 L=P.LowerLayer,U=P.UpperLayer;
+            Open.Add({Floors[L][0],Floors[L][1],Floors[U][0],Floors[U][1],L,FMath::Max(1,U)});
+        }
+        Open.Sort([](const FOpenBand& A,const FOpenBand& B){return A.Low0+A.Low1<B.Low0+B.Low1;});
+        TArray<FOpenBand,TInlineAllocator<8>> Merged;
+        for (const auto& B:Open)
+        {
+            // If bands overlap at either edge, merge conservatively: never paint across an exit.
+            if (!Merged.IsEmpty() && (B.Low0<=Merged.Last().High0 || B.Low1<=Merged.Last().High1))
+            {
+                auto& A=Merged.Last();
+                if (B.Low0+B.Low1<A.Low0+A.Low1) A.LowLayer=B.LowLayer;
+                if (B.High0+B.High1>A.High0+A.High1) A.HighLayer=B.HighLayer;
+                A.Low0=FMath::Min(A.Low0,B.Low0); A.Low1=FMath::Min(A.Low1,B.Low1);
+                A.High0=FMath::Max(A.High0,B.High0); A.High1=FMath::Max(A.High1,B.High1);
+            }
+            else Merged.Add(B);
+        }
+        if (Merged.IsEmpty()) continue;
+        // Beyond the finite world height, prevent the surface sky and the void below the
+        // deepest level appearing at normal gameplay zoom. No extra collidable terrain.
+        constexpr float VerticalCover=20000.f;
+        const auto& First=Merged[0];
+        FillSolid(First.LowLayer,X0,X1,First.Low0-VerticalCover,First.Low1-VerticalCover,First.Low0,First.Low1);
+        for (int32 J=1;J<Merged.Num();++J)
+        {
+            const auto& Below=Merged[J-1]; const auto& Above=Merged[J];
+            const float M0=(Below.High0+Above.Low0)*.5f,M1=(Below.High1+Above.Low1)*.5f;
+            FillSolid(Below.HighLayer,X0,X1,Below.High0,Below.High1,M0,M1);
+            FillSolid(Above.LowLayer,X0,X1,M0,M1,Above.Low0,Above.Low1);
+        }
+        const auto& Last=Merged.Last();
+        FillSolid(Last.HighLayer,X0,X1,Last.High0,Last.High1,FMath::Max(Last.High0,Floors[0][0])+VerticalCover,FMath::Max(Last.High1,Floors[0][1])+VerticalCover);
+    }
     for (int32 Layer=1;Layer<=4;++Layer)
     {
         FPWGv2MeshBuffers Buffer, Backdrop, NearShell, SolidEarth;
@@ -400,7 +468,17 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             continue;
         }
     }
-    int32 POISection=EarthSectionBase+4;
+    for (int32 Layer=1;Layer<=4;++Layer)
+    {
+        auto& Mask=SolidCutaway[Layer-1];
+        if (Mask.V.IsEmpty()) continue;
+        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Solid cutaway scale"),false):nullptr)
+            for (auto& UV:Mask.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);
+        const int32 Section=SolidCutawaySectionBase+Layer-1;
+        Mask.Submit(Mesh,Section); // Submit never creates collision; existing hulls are unchanged.
+        Mesh->SetMaterial(Section,WallMaterial(Layer)); // opaque biome wall texture, not translucent cutaway material
+    }
+    int32 POISection=SolidCutawaySectionBase+4;
     for (auto& Pair:POIWallBuffers) { Pair.Value.Submit(Mesh,POISection); Mesh->SetMaterial(POISection++,POIWallMaterials[Pair.Key]); }
     for (auto& Entry:ShaftWalls)
     {

@@ -147,6 +147,9 @@ private:
     // Only entrance linings and the solid earth backing may render from the surface.
     // Earth is NOT cave geometry: its top edge meets the surface behind the playable lanes.
     static constexpr int32 EarthSectionBase=25;
+    // Opaque camera-side rock/soil, separate from the far earth backing; underground only.
+    static constexpr int32 SolidCutawaySectionBase=EarthSectionBase+4;
+    static bool IsSolidCutawaySection(int32 Section) { return Section>=SolidCutawaySectionBase && Section<SolidCutawaySectionBase+4; }
     static bool IsEarthSection(int32 Section) { return Section>=EarthSectionBase && Section<EarthSectionBase+4; }
     static bool IsSurfaceVisibleUndergroundSection(int32 Section) { return IsEarthSection(Section) || Section==9 || Section==10 || Section==13 || Section==21; }
     void CaptureVisit();
