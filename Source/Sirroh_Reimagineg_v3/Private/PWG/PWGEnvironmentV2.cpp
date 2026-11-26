@@ -67,6 +67,9 @@ APWGEnvironmentV2::APWGEnvironmentV2()
     DepthPostProcess->bUnbound=true;
     DepthPostProcess->Priority=20;
     DepthPostProcess->BlendWeight=0;
+    // Config/DefaultGame.ini already always-cooks this PWG directory.
+    StylizedDepthAsset=TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(
+        TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_V2.M_PWGv2_DepthAtmosphere_V2")));
 
 
 	SkyMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("EnvironmentV2_Sky"));
@@ -330,6 +333,7 @@ void APWGEnvironmentV2::Initialize(AActor* InGenerator, const int32 InSeed)
         {
             DepthMaterial=UMaterialInstanceDynamic::Create(Material,this);
             DepthPostProcess->AddOrUpdateBlendable(DepthMaterial,1.f);
+            ActiveDepthMaterial=DepthMaterial;
         }
         else UE_LOG(LogPWGEnvironmentV2,Warning,TEXT("Missing global depth material; run Content/Python/pwg_depth_atmosphere.py"));
     }
@@ -989,12 +993,59 @@ bool APWGEnvironmentV2::IsDepthAtmosphereActive() const
     return DepthMaterial && WorldGenerator && WorldGenerator->Settings.bDepthAtmosphere;
 }
 
+void APWGEnvironmentV2::RefreshVisualProfile()
+{
+    if (GetWorld() && IsValid(Generator)) UpdateDepthAtmosphere(LastDepthSunAmount);
+}
+
+FString APWGEnvironmentV2::GetVisualProfileStatus() const
+{
+    const auto* G=Cast<APWGv2Generator>(Generator);
+    const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
+    const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
+    const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
+    const float Width=G?VisualProfile.ProtectedHalfWidth(G->Settings.LaneSpacing):0.f;
+    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | protected +/- %.0f cm | transient (no world save)"),
+        Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
+        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,Width);
+}
+
 void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
 {
+    LastDepthSunAmount=SunAmount;
     const auto* WorldGenerator=Cast<APWGv2Generator>(Generator);
+    if (!DepthPostProcess) return;
     DepthPostProcess->BlendWeight=IsDepthAtmosphereActive()?1.f:0.f;
     if (!DepthMaterial || !WorldGenerator) return;
     const auto& S=WorldGenerator->Settings;
+
+    const FPWGVisualProfile Profile=VisualProfile.Sanitized();
+    const bool bWantsV2=Profile.ResolveMode(bUndergroundView && S.bDepthAtmosphere,true)==EPWGVisualMode::Underground_Stylized;
+    if (bWantsV2 && !bTriedStylizedDepthAsset)
+    {
+        bTriedStylizedDepthAsset=true;
+        if (UMaterialInterface* Parent=StylizedDepthAsset.LoadSynchronous())
+            StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+        if (!StylizedDepthMaterial)
+            UE_LOG(LogPWGEnvironmentV2,Warning,TEXT("Visual Foundation V2 asset unavailable; using Legacy."));
+    }
+    const bool bV2=Profile.ResolveMode(bUndergroundView && S.bDepthAtmosphere,IsValid(StylizedDepthMaterial))
+        ==EPWGVisualMode::Underground_Stylized;
+    UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
+    if (ActiveDepthMaterial.Get()!=Material)
+    {
+        // One existing component, one active material. Never stack two global passes.
+        auto& Blendables=DepthPostProcess->Settings.WeightedBlendables.Array;
+        Blendables.RemoveAll([this](const FWeightedBlendable& Entry)
+        {
+            return Entry.Object.Get()==DepthMaterial.Get() || Entry.Object.Get()==StylizedDepthMaterial.Get();
+        });
+        DepthPostProcess->AddOrUpdateBlendable(Material,1.f);
+        ActiveDepthMaterial=Material;
+        ProfileMix=0.f;
+        bProfileUniformsInitialized=false;
+    }
+
     const APawn* Pawn=UGameplayStatics::GetPlayerPawn(this,0);
     const FVector Origin=Pawn?Pawn->GetActorLocation():WorldGenerator->GetActorLocation();
     const FVector DepthAxis=WorldGenerator->GetActorTransform().TransformVectorNoScale(FVector::YAxisVector).GetSafeNormal();
@@ -1008,14 +1059,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     FVector ViewLocation; FRotator ViewRotation; float Width=0,Height=0;
     if (GetView(ViewLocation,ViewRotation,Width,Height))
         FrontRange=FMath::Min(FrontRange,float(FMath::Abs(FVector::DotProduct(Origin-ViewLocation,DepthAxis))));
-    auto Scalar=[&](const TCHAR* Name,float V){DepthMaterial->SetScalarParameterValue(Name,V);};
-    DepthMaterial->SetVectorParameterValue(TEXT("PlayerOrigin"),FLinearColor(Origin.X,Origin.Y,Origin.Z,0));
-    DepthMaterial->SetVectorParameterValue(TEXT("DepthAxis"),FLinearColor(DepthAxis.X,DepthAxis.Y,DepthAxis.Z,0));
+    auto Scalar=[&](const TCHAR* Name,float V){Material->SetScalarParameterValue(Name,V);};
+    Material->SetVectorParameterValue(TEXT("PlayerOrigin"),FLinearColor(Origin.X,Origin.Y,Origin.Z,0));
+    Material->SetVectorParameterValue(TEXT("DepthAxis"),FLinearColor(DepthAxis.X,DepthAxis.Y,DepthAxis.Z,0));
     FLinearColor FogColor=FMath::Lerp(S.DepthNightFogColor,S.DepthDayFogColor,SunAmount);
     const float Dusk=4.f*SunAmount*(1.f-SunAmount)*0.25f;
     FogColor=FMath::Lerp(FogColor,FLinearColor(0.62f,0.42f,0.34f),Dusk);
     if (bUndergroundView) FogColor=FLinearColor(0.035f,0.045f,0.065f);
-    DepthMaterial->SetVectorParameterValue(TEXT("FogColor"),FogColor);
+    Material->SetVectorParameterValue(TEXT("FogColor"),FogColor);
     Scalar(TEXT("NeutralWidth"),FMath::Max(50.f,S.DepthNeutralWidth));
     Scalar(TEXT("BackRange"),FMath::Max(200.f,S.BackgroundDepth));
     Scalar(TEXT("FrontRange"),FMath::Max(200.f,FrontRange));
@@ -1029,4 +1080,33 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     Scalar(TEXT("WindTime"),GetWorld()->GetTimeSeconds()*FMath::Clamp(RegionWindMultiplier,0.1f,2.f));
     Scalar(TEXT("SkyStart"),FMath::Max(S.BackgroundDepth+500.f,SkyDepth-800.f));
     Scalar(TEXT("SkyEnd"),SkyDepth-450.f);
+
+    if (bV2)
+    {
+        const FVector ProfileOrigin=WorldGenerator->GetActorLocation();
+        const float Neutral=Profile.ProtectedHalfWidth(S.LaneSpacing);
+        if (!bProfileUniformsInitialized || !Profile.SameShaderValues(LastProfileUniforms)
+            || !ProfileOrigin.Equals(LastProfileOrigin) || Neutral!=LastProfileNeutralWidth)
+        {
+            Material->SetVectorParameterValue(TEXT("ProfileOrigin"),FLinearColor(ProfileOrigin.X,ProfileOrigin.Y,ProfileOrigin.Z,0));
+            Material->SetVectorParameterValue(TEXT("ProfileBackgroundTint"),Profile.BackgroundTint);
+            Material->SetVectorParameterValue(TEXT("ProfileForegroundTint"),Profile.ForegroundTint);
+            Scalar(TEXT("ProfileNeutralWidth"),Neutral);
+            Scalar(TEXT("ProfileBackRange"),Profile.BackRange);
+            Scalar(TEXT("ProfileFrontRange"),Profile.FrontRange);
+            Scalar(TEXT("ProfileStrength"),Profile.Strength);
+            Scalar(TEXT("ProfileFogStrength"),Profile.FogStrength);
+            Scalar(TEXT("ProfileDesaturation"),Profile.Desaturation);
+            Scalar(TEXT("ProfileForegroundDarkness"),Profile.ForegroundDarkness);
+            LastProfileUniforms=Profile;
+            LastProfileOrigin=ProfileOrigin;
+            LastProfileNeutralWidth=Neutral;
+        }
+        const float NextMix=Profile.BlendSeconds<=KINDA_SMALL_NUMBER?1.f:
+            FMath::FInterpConstantTo(ProfileMix,1.f,GetWorld()->GetDeltaSeconds(),1.f/Profile.BlendSeconds);
+        if (!bProfileUniformsInitialized || NextMix!=ProfileMix)
+            Scalar(TEXT("ProfileMix"),NextMix);
+        ProfileMix=NextMix;
+        bProfileUniformsInitialized=true;
+    }
 }

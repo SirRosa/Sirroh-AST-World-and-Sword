@@ -70,6 +70,106 @@ struct FPWGEnvironmentLayerV2
 	float ScatterScale = 1.0f;
 };
 
+UENUM(BlueprintType)
+enum class EPWGVisualMode : uint8
+{
+    Legacy,
+    Underground_Stylized
+};
+
+/** Rendering-only settings, never part of FPWGv2WorldRow or a world save. */
+USTRUCT(BlueprintType)
+struct FPWGVisualProfile
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    EPWGVisualMode Mode = EPWGVisualMode::Legacy;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float Strength = 1.0f;
+
+    /** Extra margin beyond the outer edge of all three gameplay lanes. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="100.0", Units="cm"))
+    float NeutralPadding = 10.0f;
+
+    /** Distance after the protected zone at which the ramp reaches its full effect. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="20.0", ClampMax="2000.0", Units="cm"))
+    float BackRange = 150.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="20.0", ClampMax="2000.0", Units="cm"))
+    float FrontRange = 130.0f;
+
+    /** Relative palette multiplier; luminance is normalized in the shader. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    FLinearColor BackgroundTint = FLinearColor(0.76f, 0.84f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float FogStrength = 0.65f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float Desaturation = 0.55f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
+    FLinearColor ForegroundTint = FLinearColor(0.78f, 0.66f, 0.90f, 1.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float ForegroundDarkness = 0.55f;
+
+    /** Blend into V2; Legacy and surface switch back immediately for exact A/B. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile", meta=(ClampMin="0.0", ClampMax="5.0", Units="s"))
+    float BlendSeconds = 0.25f;
+
+    FPWGVisualProfile Sanitized() const
+    {
+        const FPWGVisualProfile Defaults;
+        FPWGVisualProfile Out = *this;
+        const auto Safe = [](float V, float Fallback, float Min, float Max)
+        {
+            return FMath::IsFinite(V) ? FMath::Clamp(V, Min, Max) : Fallback;
+        };
+        const auto Color = [&Safe](FLinearColor V, const FLinearColor& Fallback)
+        {
+            return FLinearColor(Safe(V.R,Fallback.R,0.f,1.f), Safe(V.G,Fallback.G,0.f,1.f),
+                Safe(V.B,Fallback.B,0.f,1.f), 1.f);
+        };
+        if (Out.Mode != EPWGVisualMode::Underground_Stylized) Out.Mode = EPWGVisualMode::Legacy;
+        Out.Strength = Safe(Strength,Defaults.Strength,0.f,1.f);
+        Out.NeutralPadding = Safe(NeutralPadding,Defaults.NeutralPadding,0.f,100.f);
+        Out.BackRange = Safe(BackRange,Defaults.BackRange,20.f,2000.f);
+        Out.FrontRange = Safe(FrontRange,Defaults.FrontRange,20.f,2000.f);
+        Out.BackgroundTint = Color(BackgroundTint,Defaults.BackgroundTint);
+        Out.FogStrength = Safe(FogStrength,Defaults.FogStrength,0.f,1.f);
+        Out.Desaturation = Safe(Desaturation,Defaults.Desaturation,0.f,1.f);
+        Out.ForegroundTint = Color(ForegroundTint,Defaults.ForegroundTint);
+        Out.ForegroundDarkness = Safe(ForegroundDarkness,Defaults.ForegroundDarkness,0.f,1.f);
+        Out.BlendSeconds = Safe(BlendSeconds,Defaults.BlendSeconds,0.f,5.f);
+        return Out;
+    }
+
+    EPWGVisualMode ResolveMode(bool bUnderground, bool bMaterialAvailable) const
+    {
+        return Mode == EPWGVisualMode::Underground_Stylized && bUnderground && bMaterialAvailable
+            ? EPWGVisualMode::Underground_Stylized : EPWGVisualMode::Legacy;
+    }
+
+    float ProtectedHalfWidth(float LaneSpacing) const
+    {
+        // Generator lane centres are -Spacing, 0, +Spacing; each bank is 100 cm wide.
+        return (FMath::IsFinite(LaneSpacing) ? FMath::Max(0.f,LaneSpacing) : 100.f)
+            + 50.f + (FMath::IsFinite(NeutralPadding) ? FMath::Clamp(NeutralPadding,0.f,100.f) : 10.f);
+    }
+
+    bool SameShaderValues(const FPWGVisualProfile& Other) const
+    {
+        return Strength == Other.Strength && NeutralPadding == Other.NeutralPadding
+            && BackRange == Other.BackRange && FrontRange == Other.FrontRange
+            && BackgroundTint == Other.BackgroundTint && FogStrength == Other.FogStrength
+            && Desaturation == Other.Desaturation && ForegroundTint == Other.ForegroundTint
+            && ForegroundDarkness == Other.ForegroundDarkness;
+    }
+};
+
 /**
  * Completely independent replacement for the original PWG Environment code.
  * One instance belongs to the streaming root generator; chunks never create it.
@@ -86,6 +186,12 @@ public:
     void SetUndergroundView(bool bUnderground);
     void SetRegionWeather(float CloudMultiplier, float WindStrength);
     bool IsDepthAtmosphereActive() const;
+    void RefreshVisualProfile();
+    FString GetVisualProfileStatus() const;
+
+    /** Runtime override; not serialized into the world plan. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Transient, Category="Environment V2|Visual Profiles")
+    FPWGVisualProfile VisualProfile;
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Environment V2|Sky")
@@ -293,6 +399,17 @@ private:
     void UpdateDepthAtmosphere(float SunAmount);
     UPROPERTY(Transient) TObjectPtr<UPostProcessComponent> DepthPostProcess;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> DepthMaterial;
+    UPROPERTY(EditDefaultsOnly, Category="Environment V2|Visual Profiles")
+    TSoftObjectPtr<UMaterialInterface> StylizedDepthAsset;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StylizedDepthMaterial;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ActiveDepthMaterial;
+    bool bTriedStylizedDepthAsset = false;
+    bool bProfileUniformsInitialized = false;
+    FPWGVisualProfile LastProfileUniforms;
+    FVector LastProfileOrigin = FVector::ZeroVector;
+    float LastProfileNeutralWidth = 0.f;
+    float ProfileMix = 0.f;
+    float LastDepthSunAmount = 1.f;
     float DepthGroundZ = 0;
     bool bDepthGroundInitialized = false;
     float DepthWeather = 1;

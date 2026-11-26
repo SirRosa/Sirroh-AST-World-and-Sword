@@ -37,6 +37,8 @@ bool APWGv2Generator::GenerateWorld(FName)
 {
     SetActorTickEnabled(false);
     PendingSurfaceCollision.Reset(); PendingUndergroundCollision.Reset();
+    // A reload of this generator must not copy a visual override from the saved plan.
+    const FPWGVisualProfile PreviousVisualProfile=IsValid(EnvironmentV2)?EnvironmentV2->VisualProfile:FPWGVisualProfile();
     if (IsValid(EnvironmentV2)) { EnvironmentV2->Destroy(); EnvironmentV2=nullptr; }
     for (auto& Pair:Chunks) if (Pair.Value) Pair.Value->DestroyComponent();
     for (auto& Pair:GrassChunks) if (Pair.Value) Pair.Value->DestroyComponent();
@@ -192,6 +194,7 @@ bool APWGv2Generator::GenerateWorld(FName)
         EnvironmentV2->LandscapeMid.Depth=Settings.BackgroundDepth+2500;
         EnvironmentV2->LandscapeFar.Depth=Settings.BackgroundDepth+4000;
         EnvironmentV2->SkyDepth=Settings.BackgroundDepth+6000;
+        EnvironmentV2->VisualProfile=PreviousVisualProfile;
         EnvironmentV2->Initialize(this,WorldSeed);
     }
     StreamAt(0);

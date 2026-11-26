@@ -1,6 +1,7 @@
 #include "Debug/SirrohDebugSubsystem.h"
 #include "Procedural_World_Generator/PWGv2Generator.h"
 #include "PWG/PWGPlayerController.h"
+#include "PWG/PWGEnvironmentV2.h"
 #include "PWG/PWGSidescrollerInputComponent.h"
 #include "Combat/DirectionalCombatComponent.h"
 #include "Combat/CombatMotionCatalog.h"
@@ -246,6 +247,16 @@ private:
         }
         if (PC.IsValid())
         {
+            if (Generator.IsValid())
+                for (TActorIterator<APWGEnvironmentV2> It(PC->GetWorld());It;++It)
+                {
+                    if (It->GetOwner()!=Generator.Get()) continue;
+                    TWeakObjectPtr<APWGEnvironmentV2> E=*It;
+                    AddTarget(TEXT("WIZUALIA / Visual Profiles"),E.Get(),FPWGVisualProfile::StaticStruct(),
+                        [E]()->void*{return E.IsValid()?&E->VisualProfile:nullptr;},
+                        [this,E]{if(E.IsValid()){E->RefreshVisualProfile();Status=E->GetVisualProfileStatus();}});
+                    break;
+                }
             for (TActorIterator<AActor> It(PC->GetWorld());It;++It)
             {
                 auto* Combat=It->FindComponentByClass<UDirectionalCombatComponent>();
@@ -362,14 +373,31 @@ private:
             History.RemoveAt(I);
         }
         if(Changed && Selected->Changed)Selected->Changed();
-        Status=TEXT("Przywrocono wartosci celu sprzed edycji. Dla swiata nacisnij Przebuduj.");RebuildFields();
+        Status=Selected->Type==FPWGVisualProfile::StaticStruct()
+            ?TEXT("Przywrocono profil sprzed edycji, bez przebudowy swiata.")
+            :TEXT("Przywrocono wartosci celu sprzed edycji. Dla swiata nacisnij Przebuduj.");
+        RebuildFields();
     }
     void Export()
     {
         auto Root=MakeShared<FJsonObject>(); Root->SetStringField(TEXT("format"),TEXT("SirrohDebugChanges-v1"));
+        const bool bVisual=Selected && Selected->Type==FPWGVisualProfile::StaticStruct();
+        if (bVisual)
+        {
+            Root->SetStringField(TEXT("format"),TEXT("SirrohVisualProfile-v1"));
+            auto Profile=MakeShared<FJsonObject>();
+            if (Selected->Owner.IsValid())
+                if (void* Data=Selected->Address())
+                    for(TFieldIterator<FProperty> It(FPWGVisualProfile::StaticStruct());It;++It)
+                        Profile->SetStringField(It->GetName(),SirrohDebug::Read(*It,It->ContainerPtrToValuePtr<void>(Data)));
+            Root->SetObjectField(TEXT("profile"),Profile);
+            if (auto* Environment=Cast<APWGEnvironmentV2>(Selected->Owner.Get()))
+                Root->SetStringField(TEXT("runtime"),Environment->GetVisualProfileStatus());
+        }
         TArray<TSharedPtr<FJsonValue>> Values;
         for(const auto& E:History)
         {
+            if (bVisual && E.Target->Type!=FPWGVisualProfile::StaticStruct()) continue;
             auto O=MakeShared<FJsonObject>(); O->SetStringField(TEXT("target"),E.Target->Name); O->SetStringField(TEXT("property"),E.Path);
             O->SetStringField(TEXT("before"),E.Before); O->SetStringField(TEXT("after"),E.After); Values.Add(MakeShared<FJsonValueObject>(O));
         }
@@ -394,6 +422,13 @@ private:
                 +SHorizontalBox::Slot().FillWidth(1)[Button(TEXT("Przywroc wyspe"),[this]{RebuildWorld(true);})]];
         }
         Label(Selected->Name);
+        if (Selected->Type==FPWGVisualProfile::StaticStruct())
+        {
+            TWeakObjectPtr<APWGEnvironmentV2> E=Cast<APWGEnvironmentV2>(Selected->Owner.Get());
+            Fields->AddSlot().AutoHeight()[SNew(STextBlock).AutoWrapText(true)
+                .Text_Lambda([E]{return SirrohDebug::Text(E.IsValid()?E->GetVisualProfileStatus():TEXT("Brak srodowiska."));})];
+            Label(TEXT("Mode: kliknij Legacy / Underground_Stylized. Zmiany LIVE, bez Przebuduj. Kolory: (R=...,G=...,B=...,A=1)."));
+        }
         Walk(Selected,Selected->Type,Selected->Address,TEXT(""),0);
         Label(FString::Printf(TEXT("%d pol. Wartosci zapisujesz Enterem. Referencje assetow tylko do odczytu."),FieldCount));
     }
@@ -413,6 +448,19 @@ private:
     }
     void WalkProperty(TSharedPtr<SirrohDebug::FTarget> T,FProperty* P,SirrohDebug::FAddress A,FString Path,int32 Depth)
     {
+        if(auto* Color=CastField<FStructProperty>(P);
+            T->Type==FPWGVisualProfile::StaticStruct() && Color && Color->Struct==TBaseStructure<FLinearColor>::Get())
+        {
+            if(!Search.IsEmpty() && !Path.Contains(Search)) return;
+            ++FieldCount;
+            Fields->AddSlot().AutoHeight().Padding(2,3)[SNew(SHorizontalBox)
+                +SHorizontalBox::Slot().FillWidth(0.38f)[SNew(STextBlock).Text(SirrohDebug::Text(P->GetName()))]
+                +SHorizontalBox::Slot().FillWidth(0.62f)[SNew(SEditableTextBox).IsReadOnly(!CanEdit())
+                    .Text_Lambda([T,P,A]{return SirrohDebug::Text(T->Owner.IsValid()?SirrohDebug::Read(P,A()):TEXT("--"));})
+                    .OnTextCommitted_Lambda([this,T,P,A,Path](const FText& V,ETextCommit::Type How)
+                    {if(How==ETextCommit::OnEnter) Write(T,P,A,Path,V.ToString());})]];
+            return;
+        }
         if(auto* S=CastField<FStructProperty>(P))
         {
             auto Parent=Fields; auto Children=SNew(SVerticalBox); Fields=Children;
