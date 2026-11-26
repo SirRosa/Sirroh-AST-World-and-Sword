@@ -118,7 +118,7 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
         auto*& C=Groups[I.Plan][I.Mesh];
         if(!C)
         {
-            auto* M=CreateCaveReferenceMaterial(Layer);
+            auto* M=CreateCaveReferenceMaterial(Layer,I.Plan);
             if(!M){ClearCaveReferenceInstances();return false;}
             if(TexturePaths[I.Mesh])
             {
