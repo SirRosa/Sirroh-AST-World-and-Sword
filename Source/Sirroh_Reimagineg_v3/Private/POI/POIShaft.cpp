@@ -239,7 +239,7 @@ void APOIShaft::AddSection(const FPOIShaftRow& Section,float Offset)
         }
         Actor->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
         POIImageLighting::ApplyToActor(Actor); // native AST platforms can carry independent PNG mesh slots
-        GeneratedNativeActors.Add(Actor); HideLayerActor(Actor); ApplyVisualMaskToActor(Actor);
+        GeneratedNativeActors.Add(Actor); HideLayerActor(Actor); ApplyBackgroundPolicy(Actor); ApplyVisualMaskToActor(Actor);
     }
 }
 
@@ -506,7 +506,7 @@ void APOIShaft::LogVisualMaskCoverage() const
     for(const auto& State:VisualStencilStates)
         if(auto* Mesh=State.Mesh.Get())
         {
-            if(!Mesh->IsVisible() || Mesh->GetOwner()->IsHidden()) {++Hidden;continue;}
+            if(!Mesh->IsVisible() || Mesh->bHiddenInGame || Mesh->GetOwner()->IsHidden()) {++Hidden;continue;}
             if(State.AppliedStencil==APWGv2Generator::VisualRear) ++Rear;
             else if(State.AppliedStencil==APWGv2Generator::VisualGameplay) ++Gameplay;
             else if(State.AppliedStencil==APWGv2Generator::VisualCutaway) ++Cutaway;
@@ -550,6 +550,7 @@ void APOIShaft::SetBackgroundAuditSuppressed(bool bSuppress)
     if(bAuditSuppressBackground==bSuppress) return;
     bAuditSuppressBackground=bSuppress;
     for(APOIKitBlock* Block:GeneratedBlocks) ApplyBackgroundPolicy(Block);
+    for(AActor* Actor:GeneratedNativeActors) ApplyBackgroundPolicy(Actor);
     for(ULevelStreamingDynamic* Stream:GeneratedLevels)
         if(Stream && Stream->GetLoadedLevel())
             for(AActor* Actor:Stream->GetLoadedLevel()->Actors) ApplyBackgroundPolicy(Actor);

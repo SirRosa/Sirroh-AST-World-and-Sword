@@ -462,7 +462,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                     const float Low0=LayerCeiling(L,X0),Low1=LayerCeiling(L,X1);
                     const float High0=FMath::Max(Low0,LayerFloor(U,X0)),High1=FMath::Max(Low1,LayerFloor(U,X1));
                     if(High0<=Low0 && High1<=Low1) continue;
-                    const int32 Steps=FMath::Max(1,FMath::CeilToInt(FMath::Max(High0-Low0,High1-Low1)/100.f));
+                    // Subdivision count is portal-wide, not chunk/interval-dependent:
+                    // every shared vertical edge gets exactly the same vertices.
+                    const int32 Steps=FMath::Max(1,FMath::CeilToInt(FMath::Max(0.f,LayerFloor(U,Portal.X)-LayerCeiling(L,Portal.X))/80.f));
                     for(int32 J=0;J<Steps;++J)
                     {
                         const float T0=float(J)/Steps,T1=float(J+1)/Steps;

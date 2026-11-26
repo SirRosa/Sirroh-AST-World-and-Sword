@@ -11,6 +11,7 @@
 #include "Misc/Paths.h"
 #include "POI/POIShaft.h"
 #include "POI/POIKitBlock.h"
+#include "Components/BoxComponent.h"
 #include "POIImageLighting.h"
 #include "Engine/Texture2D.h"
 #include "Components/StaticMeshComponent.h"
@@ -192,6 +193,33 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             G->BackgroundModesBySection.Add(ModeKey,EPOIBackgroundMode::Enclosed);
             TestTrue(TEXT("Enclosed mode opt-in resolved without modifying save row"),G->ResolveBackgroundMode(ModeProbe)==EPOIBackgroundMode::Enclosed);
             G->BackgroundModesBySection.Remove(ModeKey);
+            // Exercise the actual fallback card: rendering policy must never disable
+            // its solid body, and switching to Enclosed restores the authored face.
+            auto* PolicyProbe=World->SpawnActor<APOIShaft>();
+            if(PolicyProbe)
+            {
+                PolicyProbe->BackgroundMode=EPOIBackgroundMode::Natural;
+                PolicyProbe->Height=300.f; PolicyProbe->Recipe.UpperLayer=1;
+                PolicyProbe->BuildShaft();
+                int32 Checked=0;
+                for(APOIKitBlock* Block:PolicyProbe->GeneratedBlocks)
+                    if(Block && Block->Settings.Kind==EPOIKitKind::Background)
+                    {
+                        ++Checked;
+                        const auto Collision=Block->GetPhysicalBody()->GetCollisionEnabled();
+                        TArray<UStaticMeshComponent*> Faces;Block->GetVisualMaskMeshes(Faces);
+                        TestTrue(TEXT("Natural card body is retained"),Collision!=ECollisionEnabled::NoCollision);
+                        for(auto* Face:Faces) TestTrue(TEXT("Natural card face is hidden"),Face->bHiddenInGame!=0);
+                        PolicyProbe->BackgroundMode=EPOIBackgroundMode::Enclosed;
+                        PolicyProbe->SetBackgroundAuditSuppressed(true);
+                        PolicyProbe->SetBackgroundAuditSuppressed(false);
+                        for(auto* Face:Faces) TestFalse(TEXT("Enclosed restores card render flag"),Face->bHiddenInGame!=0);
+                        TestEqual(TEXT("Background policy preserves body collision"),Block->GetPhysicalBody()->GetCollisionEnabled(),Collision);
+                    }
+                TestTrue(TEXT("Background policy exercised a real kit card"),Checked>0);
+                PolicyProbe->Destroy();
+            }
+            else AddError(TEXT("Background policy probe could not spawn"));
             AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d"),LitCaves,LitShafts,LitProjected,LitCards));
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
