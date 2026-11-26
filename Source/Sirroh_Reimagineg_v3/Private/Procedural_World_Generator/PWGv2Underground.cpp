@@ -19,7 +19,14 @@ float APWGv2Generator::LayerFloor(int32 Layer,float X) const
         if (Distance<=100) return Chain.FloorZ;
         if (Distance<800) { NearbyChain=&Chain; ChainBlend=1-FMath::SmoothStep(100.f,800.f,Distance); break; }
     }
-    auto ChainFloor=[&](float Base) { return NearbyChain?FMath::Lerp(Base,NearbyChain->FloorZ,ChainBlend):Base; };
+    auto ChainFloor=[&](float Base)
+    {
+        const float Floor=NearbyChain?FMath::Lerp(Base,NearbyChain->FloorZ,ChainBlend):Base;
+        // A distant shaft endpoint can pull the interpolated first layer above the
+        // local terrain. Keep its 240 cm minimum headroom plus 100 cm of roof cover.
+        // Exact authored room floors and shaft endpoints return before this blend.
+        return Layer==1?FMath::Min(Floor,Height(X)-340.f):Floor;
+    };
     const auto& L=WorldData->Layers[FMath::Clamp(Layer-1,0,3)];
     float Z=Settings.SeaLevel-L.FloorBelowSeaMetres*100;
     if (Layer==1) Z=FMath::Min(Z,Height(X)-300);
