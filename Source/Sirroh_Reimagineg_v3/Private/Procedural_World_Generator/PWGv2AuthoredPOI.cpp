@@ -1,6 +1,8 @@
 #include "Procedural_World_Generator/PWGv2Generator.h"
 #include "POI/POIArtPool.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Engine/World.h"
 
 void APWGv2Generator::PlanAuthoredPOIs()
@@ -166,6 +168,8 @@ void APWGv2Generator::BuildAuthoredPOIs(int32 Index,float Start,float End)
         POI->Recipe=WorldData->AuthoredPOIs[I]; POI->Height=POI->Recipe.SectionHeight;
         POI->Tags.Add(POI->Recipe.UpperLayer==0?TEXT("PWGSurfacePOI"):TEXT("PWGUndergroundPOI"));
         POI->bProjectBackground=HasProjectedPOIBackground(I);
+        POI->BackgroundMode=ResolveBackgroundMode(POI->Recipe);
+        POI->SetBackgroundAuditSuppressed(IsBackgroundAuditNativeSuppressed());
         POI->Seed=HashCombineFast(WorldData->Seed,I+0xA071); POI->bBuildBoundaryWalls=false;
         POI->BuildShaft(); DecorationChunks.FindOrAdd(Index).Actors.Add(POI);
     }
@@ -175,11 +179,31 @@ bool APWGv2Generator::HasProjectedPOIBackground(int32 I) const
 {
     if(!WorldData || !WorldData->AuthoredPOIs.IsValidIndex(I)) return false;
     const auto& Row=WorldData->AuthoredPOIs[I];
-    if(Row.UpperLayer<=0 || Row.ArtTheme.IsNull()) return false;
+    if(Row.UpperLayer<=0 || ResolveBackgroundMode(Row)!=EPOIBackgroundMode::Enclosed || Row.ArtTheme.IsNull()) return false;
     auto* Theme=Row.ArtTheme.LoadSynchronous();
     if(!Theme || !Theme->Backgrounds || Theme->Backgrounds->Images.IsEmpty()) return false;
     FRandomStream Random(HashCombineFast(WorldData->Seed,I+0xB671));
     const auto& Pair=Theme->Backgrounds->Images[Random.RandRange(0,Theme->Backgrounds->Images.Num()-1)];
     return Pair.Side.LoadSynchronous()!=nullptr &&
         (LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit_LitBackground.M_KitImageFit_LitBackground")) || Theme->Material.LoadSynchronous());
+}
+
+bool APWGv2Generator::UsesUnifiedBackground() const
+{
+#if !UE_BUILD_SHIPPING
+    // Only an explicit QA launch can reproduce the previous geometry for isolation.
+    return !FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
+#else
+    return true;
+#endif
+}
+EPOIBackgroundMode APWGv2Generator::ResolveBackgroundMode(const FPOIShaftRow& Row) const
+{
+    if(!UsesUnifiedBackground() || Row.UpperLayer<=0) return EPOIBackgroundMode::Enclosed;
+#if !UE_BUILD_SHIPPING
+    if(FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"))) return EPOIBackgroundMode::Enclosed;
+#endif
+    if(!Row.SectionLevel.IsNull())
+        if(const auto* Mode=BackgroundModesBySection.Find(FName(*Row.SectionLevel.ToString()))) return *Mode;
+    return BackgroundMode;
 }

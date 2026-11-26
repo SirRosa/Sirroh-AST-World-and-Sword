@@ -172,41 +172,51 @@ bool APWGv2Generator::DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,F
     }
     float Centre=0,PreferredX=0,FocusZ=0;
     int32 Layer=1;
-    if(Scene==1)
+    if(Scene==1 || Scene==4)
     {
-        Label=TEXT("Shaft");
+        Label=Scene==1?TEXT("Shaft"):TEXT("Shaft2");
         const FPWGv2Portal* Best=nullptr; float Distance=MAX_flt;
         for(const auto& P:WorldData->Portals)
-            if(P.bKitShaft && P.LowerLayer>1 && P.LowerLayer<=4 && FMath::Abs(P.X-CurrentX)<Distance)
+            if(P.bKitShaft && P.LowerLayer>1 && P.LowerLayer<=4 && (Scene!=4 || FMath::Abs(P.X-BackgroundAuditFirstShaftX)>Settings.ChunkLengthMetres*100.f) && FMath::Abs(P.X-CurrentX)<Distance)
             {Best=&P;Distance=FMath::Abs(P.X-CurrentX);}
         if(!Best)return false;
         Centre=Best->X; Layer=Best->LowerLayer;
+        if(Scene==1) BackgroundAuditFirstShaftX=Centre;
         PreferredX=Centre+(Best->Width*.5f+100.f);
         FocusZ=LayerFloor(Layer,Centre)+300.f;
     }
+    else if(Scene==5)
+    {
+        Label=TEXT("ChunkSeam");
+        const float Size=Settings.ChunkLengthMetres*100.f;
+        Centre=FMath::RoundToFloat(CurrentX/Size)*Size;
+        PreferredX=Centre; Layer=2; FocusZ=LayerFloor(Layer,Centre)+200.f;
+    }
     else
     {
-        Label=Scene==2?TEXT("POI"):TEXT("Transition");
+        Label=Scene==2?TEXT("POI"):Scene==6?TEXT("POI2"):TEXT("Transition");
         const FPWGv2RoomChain* Best=nullptr; float Distance=MAX_flt;
         for(const auto& Chain:WorldData->RoomChains)
-            if(Chain.Layer>0 && Chain.Layer<=4 && Chain.EndX-Chain.StartX>300 && FMath::Abs(Chain.StartX-CurrentX)<Distance)
+            if(Chain.Layer>0 && Chain.Layer<=4 && Chain.EndX-Chain.StartX>300 && (Scene!=6 || FMath::Abs(Chain.StartX-BackgroundAuditFirstRoomX)>Settings.ChunkLengthMetres*100.f) && FMath::Abs(Chain.StartX-CurrentX)<Distance)
             {Best=&Chain;Distance=FMath::Abs(Chain.StartX-CurrentX);}
         if(!Best)
         {
             // Old saves may have isolated authored rooms rather than room chains.
             int32 Index=INDEX_NONE;
             for(int32 I=0;I<WorldData->AuthoredPOIs.Num() && I<WorldData->AuthoredPOIPositions.Num();++I)
-                if(WorldData->AuthoredPOIs[I].UpperLayer>0 && FMath::Abs(WorldData->AuthoredPOIPositions[I].X-CurrentX)<Distance)
+                if(WorldData->AuthoredPOIs[I].UpperLayer>0 && (Scene!=6 || FMath::Abs(WorldData->AuthoredPOIPositions[I].X-BackgroundAuditFirstRoomX)>Settings.ChunkLengthMetres*100.f) && FMath::Abs(WorldData->AuthoredPOIPositions[I].X-CurrentX)<Distance)
                 {Index=I;Distance=FMath::Abs(WorldData->AuthoredPOIPositions[I].X-CurrentX);}
             if(Index==INDEX_NONE)return false;
             const auto& Row=WorldData->AuthoredPOIs[Index]; const auto& Pos=WorldData->AuthoredPOIPositions[Index];
             Layer=Row.UpperLayer; Centre=Pos.X+(Scene==3?-Row.Width*.5f:0.f);
+            if(Scene==2) BackgroundAuditFirstRoomX=Pos.X;
             PreferredX=Centre; FocusZ=LayerFloor(Layer,Centre)+200.f;
         }
         else
         {
             Layer=Best->Layer;
-            Centre=Scene==2?Best->StartX+FMath::Min((Best->EndX-Best->StartX)*.5f,600.f):Best->StartX;
+            Centre=Scene!=3?Best->StartX+FMath::Min((Best->EndX-Best->StartX)*.5f,600.f):Best->StartX;
+            if(Scene==2) BackgroundAuditFirstRoomX=Best->StartX;
             PreferredX=Centre; FocusZ=Best->FloorZ+200.f;
         }
     }
@@ -230,4 +240,25 @@ bool APWGv2Generator::DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,F
         return true;
     }
     return false;
+}
+
+bool APWGv2Generator::IsBackgroundAuditSectionVisible(int32 Section) const
+{
+    if(BackgroundAuditIsolation==2 && Section>=SolidCutawaySectionBase+4) return false;
+    if(BackgroundAuditIsolation==3 && (Section==9 || (Section>=13 && Section<=16))) return false;
+    if(BackgroundAuditIsolation==4 && Section>=5 && Section<=8) return false;
+    if(BackgroundAuditIsolation==5 && VisualRoleForSection(Section)==VisualRear) return false;
+    return true;
+}
+void APWGv2Generator::SetBackgroundAuditIsolation(int32 Isolation)
+{
+#if !UE_BUILD_SHIPPING
+    if(!IsDebugSession()) return;
+    BackgroundAuditIsolation=FMath::Clamp(Isolation,0,5);
+    for(const auto& Pair:DecorationChunks)
+        for(AActor* Actor:Pair.Value.Actors)
+            if(auto* POI=Cast<APOIShaft>(Actor)) POI->SetBackgroundAuditSuppressed(IsBackgroundAuditNativeSuppressed());
+    for(const auto& Pair:UndergroundChunks) ApplyChunkLayerVisibility(Pair.Key);
+    UE_LOG(LogTemp,Display,TEXT("UBG_ISOLATION mode=%d"),BackgroundAuditIsolation);
+#endif
 }

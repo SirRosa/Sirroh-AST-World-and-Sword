@@ -45,6 +45,15 @@ public:
     static int32 VisualRoleForSection(int32 Section);
     bool IsVisualMaskPassEnabled() const { return bVisualMaskPassEnabled && bUndergroundView; }
     bool HasProjectedPOIBackground(int32 POIIndex) const;
+    /** Authoring overrides keyed by the existing SectionLevel soft object path; no save schema change. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2|Background") EPOIBackgroundMode BackgroundMode=EPOIBackgroundMode::Natural;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2|Background") TMap<FName,EPOIBackgroundMode> BackgroundModesBySection;
+    EPOIBackgroundMode ResolveBackgroundMode(const FPOIShaftRow& Row) const;
+    bool UsesUnifiedBackground() const;
+    void SetBackgroundAuditIsolation(int32 Isolation);
+    bool IsBackgroundAuditSectionVisible(int32 Section) const;
+    bool IsBackgroundAuditNativeSuppressed() const {return BackgroundAuditIsolation==1;}
+
     void DebugVisualCoverage(const FTransform& Camera,float Width,float Height) const;
     bool DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,FVector& Focus,FString& Label);
     bool IsDebugSession() const { return DebugOriginalWorld != nullptr; }
@@ -160,6 +169,9 @@ private:
     void BuildVisualMasks(int32 Index);
     void SyncVisualMasks(int32 Index);
     bool bVisualMaskPassEnabled=false;
+    int32 BackgroundAuditIsolation=0;
+    float BackgroundAuditFirstShaftX=MAX_flt;
+    float BackgroundAuditFirstRoomX=MAX_flt;
     // Only entrance linings and the solid earth backing may render from the surface.
     // Earth is NOT cave geometry: its top edge meets the surface behind the playable lanes.
     static constexpr int32 EarthSectionBase=25;

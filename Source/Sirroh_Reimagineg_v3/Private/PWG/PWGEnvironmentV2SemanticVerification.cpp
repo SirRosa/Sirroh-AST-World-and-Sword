@@ -25,6 +25,8 @@
 void APWGEnvironmentV2::VerifySemanticVisuals()
 {
     static const bool bRequested=FParse::Param(FCommandLine::Get(),TEXT("PWGVisualPOIQA"));
+    static const bool bIsolation=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
+    static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
     auto* G=Cast<APWGv2Generator>(Generator);
     auto* PC=GetWorld()->GetFirstPlayerController();
@@ -60,10 +62,11 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(PC->GetViewTarget() && PC->GetViewTarget()!=Pawn)PC->GetViewTarget()->SetActorTickEnabled(true);
         bVisualProbeDisableMaskPass=false;
         PC->ConsoleCommand(TEXT("t.MaxFPS 60"));
+        G->SetBackgroundAuditIsolation(0);
         ++VisualProbeScene;
-        if(VisualProbeScene>3)
+        if(VisualProbeScene>(bIsolation||bEnclosed?3:6))
         {
-            UE_LOG(LogTemp,Display,TEXT("VF_RENDER_COMPLETE all four scene sequences"));
+            UE_LOG(LogTemp,Display,TEXT("VF_RENDER_COMPLETE all requested scene sequences"));
             VisualProbeStep=-1; FPlatformMisc::RequestExit(false); return;
         }
         Advance(0);
@@ -119,7 +122,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             (!StylizedDepthMaterial || ActiveDepthMaterial!=StylizedDepthMaterial || ProfileMix<.999f))
         {Fail(TEXT("semantic material not active"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("ChatGPT/VisualFoundation_POI_20261126/Render"));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -191,7 +194,11 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         case 5: SetPreset(1,true);break;
         case 6: if(!Capture(TEXT("Masks")))return;break;
         case 7:
-            if(VisualProbeScene!=0 && VisualProbeScene!=2) {NextScene();return;}
+            if(bIsolation)
+            {
+                SetPreset(1);G->SetBackgroundAuditIsolation(1);Advance(30);return;
+            }
+            if(bEnclosed || (VisualProbeScene!=0 && VisualProbeScene!=2)) {NextScene();return;}
             SetPreset(0);break;
         case 8: if(!Capture(TEXT("Dark")))return;break;
         case 9: SetPreset(2);break;
@@ -252,6 +259,21 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             else {UE_LOG(LogTemp,Error,TEXT("VF_LANE_UNAVAILABLE"));NextScene();return;}
             break;
         }
+        case 30:
+            if(!Capture(TEXT("NoNativeCards")))return;
+            G->SetBackgroundAuditIsolation(2);break;
+        case 31:
+            if(!Capture(TEXT("NoProjectedArt")))return;
+            G->SetBackgroundAuditIsolation(3);break;
+        case 32:
+            if(!Capture(TEXT("NoShaftWalls")))return;
+            G->SetBackgroundAuditIsolation(4);break;
+        case 33:
+            if(!Capture(TEXT("NoCaveBackdrop")))return;
+            G->SetBackgroundAuditIsolation(5);break;
+        case 34:
+            if(!Capture(TEXT("NativeOnly")))return;
+            NextScene();return;
         case 25:
             UE_LOG(LogTemp,Display,TEXT("VF_LANE_RESULT targetY=%.2f actualY=%.2f active=%d reached=%d"),
                 VisualProbeLaneY,Pawn->GetActorLocation().Y,Input?Input->IsLaneMoveActive():false,FMath::Abs(VisualProbeLaneY-Pawn->GetActorLocation().Y)<5.f);

@@ -178,12 +178,13 @@ APOIKitBlock* APOIShaft::AddBlock(const FPOIKitSettings& Settings,const FTransfo
     UGameplayStatics::FinishSpawningActor(Block,Local*GetActorTransform());
     Block->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
     if (Boundary) Block->Tags.Add(TEXT("POIAutoBoundary"));
-    GeneratedBlocks.Add(Block); HideLayerActor(Block); ApplyVisualMaskToActor(Block); return Block;
+    GeneratedBlocks.Add(Block); HideLayerActor(Block); ApplyBackgroundPolicy(Block); ApplyVisualMaskToActor(Block); return Block;
 }
 void APOIShaft::ClearGenerated()
 {
     RestoreVisualStencils();
     PendingBlocks.Reset();
+    RestoreBackgroundPolicy();
     SetActorTickInterval(.25f);
     for (ULevelStreamingDynamic* Level:GeneratedLevels) if (Level)
     {
@@ -416,8 +417,7 @@ void APOIShaft::ApplyLoadedArt()
         {
             if (Theme) Theme->Apply(Block->Settings,Random);
             Block->RefreshAppearance();
-            if (bProjectBackground && Block->Settings.Kind==EPOIKitKind::Background)
-                for (auto* C:Block->GetComponents()) if (auto* Mesh=Cast<UStaticMeshComponent>(C)) Mesh->SetVisibility(false);
+            ApplyBackgroundPolicy(Block);
         }
         int32 LitSlots=0;
         for (AActor* Actor:Level->Actors)
@@ -513,4 +513,44 @@ void APOIShaft::LogVisualMaskCoverage() const
         }
     if(Rear+Gameplay+Cutaway>0)
         UE_LOG(LogTemp,Display,TEXT("VF_POI_MASK %s rear=%d gameplay=%d cutaway=%d hidden=%d projected=%d levels=%d"),*GetName(),Rear,Gameplay,Cutaway,Hidden,bProjectBackground,GeneratedLevels.Num());
+}
+
+void APOIShaft::ApplyBackgroundPolicy(AActor* Actor)
+{
+    auto* Block=Cast<APOIKitBlock>(Actor);
+    if(!IsValid(Block) || Block->Settings.Kind!=EPOIKitKind::Background) return;
+    const bool bSuppress=UsesNaturalBackground() || bProjectBackground || bAuditSuppressBackground;
+    TArray<UStaticMeshComponent*> Meshes;
+    Block->GetVisualMaskMeshes(Meshes);
+    for(UStaticMeshComponent* Mesh:Meshes)
+    {
+        const TWeakObjectPtr<UStaticMeshComponent> Key(Mesh);
+        if(bSuppress)
+        {
+            if(!SuppressedBackgroundMeshes.Contains(Key))
+                SuppressedBackgroundMeshes.Add(Key,Mesh->bHiddenInGame!=0);
+            // Only render faces, never PhysicalBody, proximity, adapters or actor simulation.
+            Mesh->SetHiddenInGame(true);
+        }
+        else if(const bool* Original=SuppressedBackgroundMeshes.Find(Key))
+        {
+            Mesh->SetHiddenInGame(*Original);
+            SuppressedBackgroundMeshes.Remove(Key);
+        }
+    }
+}
+void APOIShaft::RestoreBackgroundPolicy()
+{
+    for(const auto& Pair:SuppressedBackgroundMeshes)
+        if(auto* Mesh=Pair.Key.Get()) Mesh->SetHiddenInGame(Pair.Value);
+    SuppressedBackgroundMeshes.Reset();
+}
+void APOIShaft::SetBackgroundAuditSuppressed(bool bSuppress)
+{
+    if(bAuditSuppressBackground==bSuppress) return;
+    bAuditSuppressBackground=bSuppress;
+    for(APOIKitBlock* Block:GeneratedBlocks) ApplyBackgroundPolicy(Block);
+    for(ULevelStreamingDynamic* Stream:GeneratedLevels)
+        if(Stream && Stream->GetLoadedLevel())
+            for(AActor* Actor:Stream->GetLoadedLevel()->Actors) ApplyBackgroundPolicy(Actor);
 }

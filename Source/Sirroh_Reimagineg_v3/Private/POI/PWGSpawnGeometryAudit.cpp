@@ -182,6 +182,16 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                 Card->Destroy();
             }
             TestTrue(TEXT("Audit contains lit cave and kit backgrounds"),LitCaves>0 && LitCards>0);
+            if(G->UsesUnifiedBackground() && G->BackgroundMode!=EPOIBackgroundMode::Enclosed)
+                TestEqual(TEXT("Natural default has no projected rectangular POI art"),LitProjected,0);
+            FPOIShaftRow ModeProbe; ModeProbe.UpperLayer=1;
+            ModeProbe.SectionLevel=TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/POIKit/TestMode.TestMode")));
+            const FName ModeKey(*ModeProbe.SectionLevel.ToString());
+            G->BackgroundModesBySection.Add(ModeKey,EPOIBackgroundMode::Architectural);
+            TestTrue(TEXT("Architectural mode resolved from authored path"),G->ResolveBackgroundMode(ModeProbe)==EPOIBackgroundMode::Architectural);
+            G->BackgroundModesBySection.Add(ModeKey,EPOIBackgroundMode::Enclosed);
+            TestTrue(TEXT("Enclosed mode opt-in resolved without modifying save row"),G->ResolveBackgroundMode(ModeProbe)==EPOIBackgroundMode::Enclosed);
+            G->BackgroundModesBySection.Remove(ModeKey);
             AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d"),LitCaves,LitShafts,LitProjected,LitCards));
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;

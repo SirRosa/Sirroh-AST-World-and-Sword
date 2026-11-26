@@ -181,6 +181,29 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         for (float Edge:{P.X-P.Width/2,P.X+P.Width/2}) if (Edge>Start && Edge<End) Samples.AddUnique(Edge);
     for (const auto& Region:WorldData->Regions)
         for (float Edge:{Region.StartX,Region.EndX}) if (Edge>Start && Edge<End) Samples.AddUnique(Edge);
+    const bool bUnified=UsesUnifiedBackground();
+    // One continuous world-coordinate rear surface for every opening. Its depth,
+    // tangent/normal and UV do not depend on the portal, POI, chunk or local room height.
+    auto RearPoint=[](float X,float Z)
+    {
+        return FVector(X,185.0+34.0*FMath::Sin(X/390.0+Z/560.0)+22.0*FMath::Sin(Z/245.0-X/780.0),Z);
+    };
+    auto RearQuad=[&](FPWGv2MeshBuffers& Dest,FVector A,FVector B,FVector C,FVector D,FLinearColor Color)
+    {
+        Dest.Quad(A,B,C,D,Color);
+        const FVector P[4]={A,B,C,D};
+        for(int32 J=0;J<4;++J)
+        {
+            const FVector Q=P[J];
+            const FVector DX=RearPoint(Q.X+1,Q.Z)-RearPoint(Q.X-1,Q.Z);
+            const FVector DZ=RearPoint(Q.X,Q.Z+1)-RearPoint(Q.X,Q.Z-1);
+            Dest.N[Dest.N.Num()-4+J]=FVector::CrossProduct(DX,DZ).GetSafeNormal();
+            Dest.UV[Dest.UV.Num()-4+J]=FVector2D(Q.X/100,-Q.Z/100);
+        }
+    };
+    // One existing rock material and texel scale across the connected underground.
+    // Other gameplay/foreground/earth materials retain their existing layer identity.
+    constexpr int32 NaturalMaterialLayer=1;
     TMap<int32,FPWGv2MeshBuffers> POIWallBuffers;
     TMap<int32,TObjectPtr<UMaterialInstanceDynamic>> POIWallMaterials;
     for (int32 P=0;P<WorldData->AuthoredPOIs.Num();++P)
@@ -200,7 +223,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         Material->SetTextureParameterValue(TEXT("ImageTexture"),Texture);
         Material->SetVectorParameterValue(TEXT("Tint"),FLinearColor::White);
         Material->SetVectorParameterValue(TEXT("UVRect"),FLinearColor(Pair.SideUV.X,Pair.SideUV.Y,Pair.SideUV.Z,Pair.SideUV.W));
-        POIWallMaterials.Add(P,Material);
+        if(!bUnified || ResolveBackgroundMode(Row)==EPOIBackgroundMode::Enclosed) POIWallMaterials.Add(P,Material);
         for (float Edge:{Pos.X-Row.Width*.5f,Pos.X+Row.Width*.5f}) if (Edge>Start && Edge<End) Samples.AddUnique(Edge);
     }
     Samples.Sort();
@@ -325,6 +348,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                 const float Floor=LayerFloor(Layer,X),Roof=LayerCeiling(Layer,X);
                 const float Noise=FMath::PerlinNoise1D(X/700.f+Layer*193+WorldData->Seed%4096);
                 const float Bulge=WorldData->Layers[Layer-1].bRectangular?0.f:FMath::Sin(PI*T)*(170.f+70.f*Noise);
+                if(bUnified && !Front) return RearPoint(X,FMath::Lerp(Floor,Roof,T));
                 return FVector(X,Front?-Settings.LaneSpacing-75-Bulge:75+Bulge,FMath::Lerp(Floor,Roof,T));
             };
             // Stable, cheap outer limits for the two playable lanes. Decorative depth
@@ -349,12 +373,14 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                     if (FrontSide) Shell.Quad(D,C,B,A,Shade);
                     else
                     {
-                        Shell.Quad(A,B,C,D,Shade);
+                        if(bUnified && WallPOI==INDEX_NONE) RearQuad(Shell,A,B,C,D,FLinearColor::White);
+                        else Shell.Quad(A,B,C,D,Shade);
                         if (WallPOI!=INDEX_NONE)
                         {
                             // Existing natural wall behind masked PNG holes. No new texture or collision.
                             const FVector Offset(0,2.f,0);
-                            Backdrop.Quad(A+Offset,B+Offset,C+Offset,D+Offset,Shade);
+                            if(bUnified) RearQuad(Backdrop,A+Offset,B+Offset,C+Offset,D+Offset,FLinearColor::White);
+                            else Backdrop.Quad(A+Offset,B+Offset,C+Offset,D+Offset,Shade);
                             const FVector BackPoints[4]={A,B,C,D};
                             for (int32 U=0;U<4;++U)
                                 Backdrop.UV[Backdrop.UV.Num()-4+U]=FVector2D(BackPoints[U].X/100,-BackPoints[U].Z/100);
@@ -378,13 +404,16 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Wall scale"),false):nullptr)
         {
             const float Scale=100.f/FMath::Max(25.f,Row->TilingWorldSize);
-            for (auto& UV:Backdrop.UV) UV*=Scale;
+            if(!bUnified) for (auto& UV:Backdrop.UV) UV*=Scale;
             for (auto& UV:SolidEarth.UV) UV*=Scale;
             for (auto& UV:NearShell.UV) UV*=Scale;
         }
         NearShell.Submit(Mesh,16+Layer); Mesh->SetMaterial(16+Layer,WallMaterial(Layer,true));
         // Only the actual cave interior receives scene lights; SolidEarth and the cutaway remain independent.
-        Backdrop.Submit(Mesh,Layer+4); Mesh->SetMaterial(Layer+4,WallMaterial(Layer,false,false,false,true));
+        if(bUnified)
+            if(const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[NaturalMaterialLayer-1].WallTexture,TEXT("Unified back scale"),false):nullptr)
+                for(auto& UV:Backdrop.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);
+        Backdrop.Submit(Mesh,Layer+4); Mesh->SetMaterial(Layer+4,WallMaterial(bUnified?NaturalMaterialLayer:Layer,false,false,false,true));
         if (!SolidEarth.V.IsEmpty())
         {
             const int32 EarthSection=EarthSectionBase+Layer-1;
@@ -406,6 +435,43 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         // Old direct-to-caves entrances (0->2) must not share the deeper 1->2 section.
         const int32 ShaftKey=Portal.UpperLayer==0 && Portal.LowerLayer==2?-2:Portal.LowerLayer;
         auto& Shaft=ShaftWalls.FindOrAdd(ShaftKey);
+        if(bUnified)
+        {
+            // The tunnel already owns its entire rear surface. Fill only the vertical
+            // gaps between it and the next tunnel, using the SAME horizontal samples.
+            // Keep the old shaft front/collision construction below unchanged.
+            for(int32 I=0;I<Samples.Num()-1;++I)
+            {
+                const float X0=Samples[I],X1=Samples[I+1],Mid=(X0+X1)*.5f;
+                if(Mid<WallLeft || Mid>=WallRight) continue;
+                for(int32 L=Portal.LowerLayer;L>Portal.UpperLayer;--L)
+                {
+                    int32 U=L-1;
+                    if(U==1 && RegionAt(Mid).Definition.EntranceStyle==EPWGv2EntranceStyle::None)
+                    { U=0; }
+                    if(L==1 && RegionAt(Mid).Definition.EntranceStyle==EPWGv2EntranceStyle::None) continue;
+                    // Deterministic ownership if two saved portals overlap horizontally.
+                    bool bOwned=true;
+                    for(const auto& Earlier:WorldData->Portals)
+                    {
+                        if(&Earlier==&Portal) break;
+                        if(Earlier.UpperLayer<L && Earlier.LowerLayer>=L && FMath::Abs(Mid-Earlier.X)<Earlier.Width*.5f)
+                        {bOwned=false;break;}
+                    }
+                    if(!bOwned) continue;
+                    const float Low0=LayerCeiling(L,X0),Low1=LayerCeiling(L,X1);
+                    const float High0=FMath::Max(Low0,LayerFloor(U,X0)),High1=FMath::Max(Low1,LayerFloor(U,X1));
+                    if(High0<=Low0 && High1<=Low1) continue;
+                    const int32 Steps=FMath::Max(1,FMath::CeilToInt(FMath::Max(High0-Low0,High1-Low1)/100.f));
+                    for(int32 J=0;J<Steps;++J)
+                    {
+                        const float T0=float(J)/Steps,T1=float(J+1)/Steps;
+                        RearQuad(Shaft,RearPoint(X0,FMath::Lerp(Low0,High0,T0)),RearPoint(X1,FMath::Lerp(Low1,High1,T0)),
+                            RearPoint(X1,FMath::Lerp(Low1,High1,T1)),RearPoint(X0,FMath::Lerp(Low0,High0,T1)),FLinearColor::White);
+                    }
+                }
+            }
+        }
         const float UpperLeft=LayerFloor(Portal.UpperLayer,WallLeft),UpperRight=LayerFloor(Portal.UpperLayer,WallRight);
         const float ShaftTop=FMath::Max3(Upper,UpperLeft,UpperRight);
         TArray<float> Bands={Lower,ShaftTop};
@@ -419,7 +485,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         {
             const float Z=Bands[I-1], Top=Bands[I];
             const float Back0=100+35*FMath::Sin(Z/240+Portal.X/600),Back1=100+35*FMath::Sin(Top/240+Portal.X/600);
-            Shaft.Quad(FVector(WallLeft,Back0,FMath::Min(Z,UpperLeft)),FVector(WallRight,Back0,FMath::Min(Z,UpperRight)),
+            if(!bUnified) Shaft.Quad(FVector(WallLeft,Back0,FMath::Min(Z,UpperLeft)),FVector(WallRight,Back0,FMath::Min(Z,UpperRight)),
                 FVector(WallRight,Back1,FMath::Min(Top,UpperRight)),FVector(WallLeft,Back1,FMath::Min(Top,UpperLeft)),FLinearColor::White);
             auto& Front=ShaftFronts.FindOrAdd(ShaftKey);
             Front.Quad(FVector(WallLeft,-75,FMath::Min(Z,UpperLeft)),FVector(WallRight,-75,FMath::Min(Z,UpperRight)),
@@ -444,8 +510,11 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                 const float EdgeTop=FMath::Min(Top,LayerFloor(Portal.UpperLayer,Edge));
                 if (Z>=EdgeTop) continue;
                 const FVector A(Edge,-75,Z),B(Edge,Back0,Z),C(Edge,Back1,EdgeTop),D(Edge,-75,EdgeTop);
-                if (Side<0) Shaft.Quad(A,B,C,D,FLinearColor::White);
-                else Shaft.Quad(D,C,B,A,FLinearColor::White);
+                if(!bUnified)
+                {
+                    if (Side<0) Shaft.Quad(A,B,C,D,FLinearColor::White);
+                    else Shaft.Quad(D,C,B,A,FLinearColor::White);
+                }
                 const FVector Out(Side*35.f,0,0);
                 Hulls.Add({A,B,C,D,A+Out,B+Out,C+Out,D+Out});
             }
@@ -463,6 +532,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                     KitShaft->bIncrementalBuild=AsyncCooking;
                     KitShaft->bBuildBoundaryWalls=false; // PWG owns the lining and the exits at each layer.
                     KitShaft->Recipe=Portal.ShaftRecipe; KitShaft->Height=Upper-Lower;
+                    // Entrance and lower shaft kit cards are not the base underground wall.
+                    KitShaft->BackgroundMode=bUnified?EPOIBackgroundMode::Natural:EPOIBackgroundMode::Enclosed;
+                    KitShaft->SetBackgroundAuditSuppressed(IsBackgroundAuditNativeSuppressed());
                     KitShaft->BottomExitClearance=LayerCeiling(Portal.LowerLayer,Portal.X)-Lower;
                     KitShaft->SavedModules=Portal.ShaftModules;
                     KitShaft->PlannedSections=Portal.ShaftSectionPlan;
@@ -651,13 +723,13 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         // material, tint and world-space texel scale. Previously the shaft used the
         // floor atlas with white tint and default scale: a hard dark stripe at mouths.
         // This is a visual-only correction; the hulls, portals and saved geometry stay intact.
-        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Shaft back scale"),false):nullptr)
+        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[(bUnified?NaturalMaterialLayer:Layer)-1].WallTexture,TEXT("Shaft back scale"),false):nullptr)
         {
             const float Scale=100.f/FMath::Max(25.f,Row->TilingWorldSize);
             for (auto& UV:Entry.Value.UV) UV*=Scale;
         }
         Entry.Value.Submit(Mesh,Section);
-        Mesh->SetMaterial(Section,WallMaterial(Layer,false,false,false,true));
+        Mesh->SetMaterial(Section,WallMaterial(bUnified?NaturalMaterialLayer:Layer,false,false,false,true));
     }
     for (auto& Entry:ShaftFronts)
     {

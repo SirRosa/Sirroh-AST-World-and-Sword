@@ -332,7 +332,7 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
             for (int32 Section=0;Section<Batch->UndergroundSectionBounds.Num();++Section)
                 if (Batch->UndergroundSectionBounds[Section].IsValid)
                 {
-                    const bool bVisible=bUndergroundView || IsSurfaceVisibleUndergroundSection(Section);
+                    const bool bVisible=(bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && IsBackgroundAuditSectionVisible(Section);
                     if (Mesh->IsMeshSectionVisible(Section)!=bVisible) Mesh->SetMeshSectionVisible(Section,bVisible);
                     // The same solid earth is visible behind surface slopes and through
                     // underground shell openings. Only change its material in the latter view.
@@ -401,7 +401,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
             {
                 const FBox& Bounds = Batch.UndergroundSectionBounds[Section];
                 if (!Bounds.IsValid) continue;
-                const bool bVisible = (bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && InView(Bounds);
+                const bool bVisible = (bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && InView(Bounds) && IsBackgroundAuditSectionVisible(Section);
                 if (Mesh->IsMeshSectionVisible(Section) != bVisible)
                     Mesh->SetMeshSectionVisible(Section, bVisible);
             }

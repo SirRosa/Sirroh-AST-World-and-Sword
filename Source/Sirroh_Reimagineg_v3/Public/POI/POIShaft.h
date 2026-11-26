@@ -29,6 +29,10 @@ struct SIRROH_REIMAGINEG_V3_API FPOIShaftPiece
 UENUM(BlueprintType)
 enum class EPOIShaftRole : uint8 { RepeatedSection, Entrance, Middle, Exit };
 
+/** Visual policy only; deliberately NOT a member of the serialized FPOIShaftRow. */
+UENUM(BlueprintType)
+enum class EPOIBackgroundMode : uint8 { Natural, Architectural, Enclosed };
+
 USTRUCT(BlueprintType)
 struct SIRROH_REIMAGINEG_V3_API FPOIShaftRow : public FTableRowBase
 {
@@ -67,6 +71,10 @@ public:
     virtual void Tick(float DeltaSeconds) override;
     /** Runtime underground fragments project their background art onto the tunnel mesh. */
     bool bProjectBackground=false;
+    /** Workshop stays authored; PWG assigns the runtime policy before building. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft|Background") EPOIBackgroundMode BackgroundMode=EPOIBackgroundMode::Enclosed;
+    void SetBackgroundAuditSuppressed(bool bSuppress);
+    bool UsesNaturalBackground() const { return BackgroundMode!=EPOIBackgroundMode::Enclosed; }
     // PWG enables this only for distant, prefetched chunks. Initial/nearby builds stay immediate.
     bool bIncrementalBuild=false;
     bool HasPendingBuild() const { return !PendingBlocks.IsEmpty(); }
@@ -112,6 +120,10 @@ private:
     bool bDormant=false;
     bool bLayerRenderHidden=false;
     bool bVisualMaskEnabled=false;
+    bool bAuditSuppressBackground=false;
+    TMap<TWeakObjectPtr<UStaticMeshComponent>,bool> SuppressedBackgroundMeshes;
+    void ApplyBackgroundPolicy(AActor* Actor);
+    void RestoreBackgroundPolicy();
     struct FVisualStencilState { TWeakObjectPtr<UPrimitiveComponent> Mesh; int32 OriginalStencil=0; bool bOriginalEnabled=false; int32 AppliedStencil=0; };
     TArray<FVisualStencilState> VisualStencilStates;
     void ApplyVisualMaskToActor(AActor* Actor);
