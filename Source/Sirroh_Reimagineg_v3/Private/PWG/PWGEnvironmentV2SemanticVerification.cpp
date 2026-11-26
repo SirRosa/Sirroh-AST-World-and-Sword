@@ -259,21 +259,18 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             else {UE_LOG(LogTemp,Error,TEXT("VF_LANE_UNAVAILABLE"));NextScene();return;}
             break;
         }
-        case 30:
-            if(!Capture(TEXT("NoNativeCards")))return;
-            G->SetBackgroundAuditIsolation(2);break;
-        case 31:
-            if(!Capture(TEXT("NoProjectedArt")))return;
-            G->SetBackgroundAuditIsolation(3);break;
-        case 32:
-            if(!Capture(TEXT("NoShaftWalls")))return;
-            G->SetBackgroundAuditIsolation(4);break;
-        case 33:
-            if(!Capture(TEXT("NoCaveBackdrop")))return;
-            G->SetBackgroundAuditIsolation(5);break;
-        case 34:
-            if(!Capture(TEXT("NativeOnly")))return;
-            NextScene();return;
+        // FScreenshotRequest is serviced later by the renderer. Keep the
+        // selected layer state unchanged until the next QA step.
+        case 30: if(!Capture(TEXT("NoNativeCards")))return;break;
+        case 31: G->SetBackgroundAuditIsolation(2);break;
+        case 32: if(!Capture(TEXT("NoProjectedArt")))return;break;
+        case 33: G->SetBackgroundAuditIsolation(3);break;
+        case 34: if(!Capture(TEXT("NoShaftWalls")))return;break;
+        case 35: G->SetBackgroundAuditIsolation(4);break;
+        case 36: if(!Capture(TEXT("NoCaveBackdrop")))return;break;
+        case 37: G->SetBackgroundAuditIsolation(5);break;
+        case 38: if(!Capture(TEXT("NativeOnly")))return;break;
+        case 39: NextScene();return;
         case 25:
             UE_LOG(LogTemp,Display,TEXT("VF_LANE_RESULT targetY=%.2f actualY=%.2f active=%d reached=%d"),
                 VisualProbeLaneY,Pawn->GetActorLocation().Y,Input?Input->IsLaneMoveActive():false,FMath::Abs(VisualProbeLaneY-Pawn->GetActorLocation().Y)<5.f);
