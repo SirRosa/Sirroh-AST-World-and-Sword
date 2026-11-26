@@ -13,7 +13,7 @@ out.mkdir(parents=True,exist_ok=True)
 reg.search_all_assets(True)
 names={'S_Rock_shopk','Debris_Chunk1','Debris_Chunk2','Debris_Chunk3','ultkedqjw_LOD7','ultkedqjw_4K_Albedo','ultkedqjw_4K_Normal_LOD0','ultkedqjw_4K_Roughness','T_Rock_shopk_2K_D','T_Rock_shopk_2K_N','T_Rock_shopk_2K_DpR','MI_Rock_shopk_2K','M_PWGv2_BackgroundLit','M_PWGv2_CaveReferenceRock'}
 found={}
-for d in reg.get_assets_by_path('/Game',recursive=True):
+for d in reg.get_assets_by_paths(['/Game','/AST_InventorySystem'],recursive=True):
     name=str(d.asset_name)
     if name in names:
         found.setdefault(name,[]).append(d)
