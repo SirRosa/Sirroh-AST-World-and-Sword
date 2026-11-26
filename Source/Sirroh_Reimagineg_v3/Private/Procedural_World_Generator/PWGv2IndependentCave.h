@@ -125,8 +125,55 @@ namespace PWGIndependentCave
             }break;
         }
     }
+    struct FHybridInstance
+    {
+        int32 Plan=0, Mesh=0;
+        FVector Centre=FVector::ZeroVector, Extent=FVector::ZeroVector;
+        double Angle=0.;
+        bool operator==(const FHybridInstance& O) const
+        {return Plan==O.Plan && Mesh==O.Mesh && Centre==O.Centre && Extent==O.Extent && Angle==O.Angle;}
+    };
+    // Real asset meshes are normalized to visual bounds, never collision bounds.
+    // Interpenetrating geological clusters replace the separated regular blocks.
+    inline void HybridFormation(TArray<FHybridInstance>& Out,FRandomStream& R,int32 Plan,EFamily Family,
+        FVector C,double RX,double RY,double H,bool Hanging)
+    {
+        auto Rock=[&](double X,double Z,double W,double HH,double Angle)
+        {
+            FHybridInstance I; I.Plan=Plan;
+            I.Mesh=Plan==2?(R.FRand()<.55f?0:4):R.RandRange(0,3);
+            I.Centre=C+FVector(X*RX,RY*R.FRandRange(-.16f,.16f),Z*H);
+            I.Extent=FVector(RX*W*R.FRandRange(.88f,1.12f),RY*R.FRandRange(.65f,.9f),H*HH*R.FRandRange(.89f,1.11f));
+            I.Angle=Angle+R.FRandRange(-12.f,12.f);
+            Out.Add(I);
+        };
+        switch(Family)
+        {
+        case EFamily::Strata:
+            Rock(-.08,-.24,1.12,.31,-9);Rock(.12,.03,1.0,.29,7);Rock(-.22,.29,.88,.28,-12);
+            Rock(.65,-.20,.55,.18,28);break;
+        case EFamily::Fracture:
+            Rock(-.14,-.20,.73,.36,-14);Rock(.10,.18,.70,.38,19);
+            Rock(-.45,.04,.46,.27,-32);Rock(.58,-.29,.45,.18,36);break;
+        case EFamily::Overhang:
+            Rock(-.21,.16,1.10,.31,12);Rock(.52,.03,.69,.30,-25);Rock(.28,-.29,.34,.28,-12);
+            break;
+        case EFamily::Speleothem:
+        {
+            const double S=Hanging?-1.:1.;
+            Rock(-.11,-S*.24,.60,.26,-S*12);Rock(.04,S*.06,.36,.22,S*17);
+            Rock(.19,S*.29,.16,.18,S*25);Rock(-.61,-S*.20,.24,.17,-S*21);break;
+        }
+        case EFamily::Boulders:
+            Rock(-.57,-.13,.48,.37,-36);Rock(.33,-.19,.62,.31,24);
+            Rock(-.05,.12,.55,.30,-15);Rock(.77,-.28,.28,.19,51);break;
+        case EFamily::Ridge:
+            Rock(-.53,-.17,.63,.44,-29);Rock(.12,.02,.74,.48,9);
+            Rock(.67,.18,.58,.39,25);break;
+        }
+    }
     inline void Build(FPWGv2MeshBuffers (&B)[4],int32 Seed,double X,double Floor,double Roof,double Width,
-        double ViewZ,double ViewHeight,double HalfWidth,double Start,double Depth,const FRecipe& Recipe=FRecipe())
+        double ViewZ,double ViewHeight,double HalfWidth,double Start,double Depth,const FRecipe& Recipe=FRecipe(),TArray<FHybridInstance>* Hybrid=nullptr)
     {
         const double H=FMath::Max(240.0,Roof-Floor);
         FRandomStream R(Seed);
@@ -139,8 +186,10 @@ namespace PWGIndependentCave
             const double Size=FMath::Clamp(Recipe.Scale,.4,1.6);
             const double HH=(High-Low)*H*Size;
             if(Recipe.Density<1. && R.FRand()>Recipe.Density)return;
-            Formation(B[Plan],R,Kind,FVector(X+(Pos+J)*Width,Y,Floor+(Low+High)*.5*H),
-                Radius*Width*Size*R.FRandRange(.88f,1.12f),Depth*(Plan==0?.028:Plan==1?.038:.045),HH,Hanging);
+            const FVector C(X+(Pos+J)*Width,Y,Floor+(Low+High)*.5*H);
+            const double RX=Radius*Width*Size*R.FRandRange(.88f,1.12f),RY=Depth*(Plan==0?.028:Plan==1?.038:.045);
+            if(Hybrid)HybridFormation(*Hybrid,R,Plan,Kind,C,RX,RY,HH,Hanging);
+            else Formation(B[Plan],R,Kind,C,RX,RY,HH,Hanging);
         };
         Form(0,EFamily::Strata,-.42,-.26,1.24,.115);
         Form(0,EFamily::Boulders,.43,-.23,.35,.105);
