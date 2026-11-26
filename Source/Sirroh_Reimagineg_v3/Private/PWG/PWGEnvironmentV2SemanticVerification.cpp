@@ -50,7 +50,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(Mover) Mover->SetComponentTickEnabled(!bFreeze);
         if(Input) Input->SetComponentTickEnabled(!bFreeze);
     };
-    auto SetPreset=[this,bGeoQA,bCaveQA,bDepthQA](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
+    auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
     {
         VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
         VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
