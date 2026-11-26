@@ -125,13 +125,18 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             // Test the real parent shaders on both generated procedural walls and kit cards.
             auto IsLit=[](UMaterialInterface* M,const TCHAR* Name)
             { return M && M->GetMaterial() && M->GetMaterial()->GetName()==Name && M->GetMaterial()->GetShadingModels().HasShadingModel(MSM_DefaultLit); };
-            int32 LitCaves=0,LitShafts=0,LitProjected=0,LitCards=0;
+            int32 LitCaves=0,LitShafts=0,LitProjected=0,LitCards=0,LitDepth=0;
             for (const auto& Pair:G->UndergroundChunks) if (auto* M=Pair.Value.Get())
                 for (int32 S=0;S<M->GetNumSections();++S)
                 {
                     const auto* Part=M->GetProcMeshSection(S); if (!Part || Part->ProcVertexBuffer.IsEmpty()) continue;
                     if (S>=5 && S<=8) { ++LitCaves; TestTrue(TEXT("Cave interior is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit"))); }
                     else if (S==9 || (S>=13 && S<=16)) { ++LitShafts; TestTrue(TEXT("Shaft lining is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit"))); }
+                    else if (const auto* Batch=G->DecorationChunks.Find(Pair.Key); Batch && Batch->DepthPrototypePlans.Contains(S))
+                    {
+                        ++LitDepth; TestTrue(TEXT("Depth formation is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit")));
+                        TestFalse(TEXT("Depth formation has no collision"),Part->bEnableCollision);
+                    }
                     else if (S>=G->SolidCutawaySectionBase+4) { ++LitProjected; TestTrue(TEXT("Projected POI background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_KitImageFit_LitBackground"))); }
                 }
             // Direct card path is also exercised when this seed has only projected room backgrounds.
@@ -220,7 +225,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                 PolicyProbe->Destroy();
             }
             else AddError(TEXT("Background policy probe could not spawn"));
-            AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d"),LitCaves,LitShafts,LitProjected,LitCards));
+            AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d depth=%d"),LitCaves,LitShafts,LitProjected,LitCards,LitDepth));
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
             int32 ShadeMin=255,ShadeMax=0,BlackVertices=0;
@@ -351,7 +356,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                                 if (bUnderground) TestTrue(TEXT("Exposed earth backing is lit underground"),IsLit(Mesh->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit")));
                             }
                             else if (G->IsSolidCutawaySection(S)) TestTrue(TEXT("Solid foreground only underground"),Mesh->IsMeshSectionVisible(S)==bUnderground);
-                            else TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceVisibleUndergroundSection(S)));
+                            else TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==((bUnderground || G->IsSurfaceVisibleUndergroundSection(S)) && G->IsDepthPrototypeSectionVisible(Batch,S)));
                         }
                 }
                 TestTrue(TEXT("Visibility audit has actual terrain draw sections"),Surface>0 && SurfaceSections>0);
@@ -362,7 +367,25 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             TMap<UProceduralMeshComponent*,ECollisionEnabled::Type> CollisionBefore;
             for (auto* Mesh:Meshes) CollisionBefore.Add(Mesh,Mesh->GetCollisionEnabled());
             G->UpdateCutaway(Spawn+FVector(0,0,100)); CheckVisibility(false);
-            G->UpdateCutaway(Spawn-FVector(0,0,5000)); CheckVisibility(true);
+            G->UpdateCutaway(Spawn-FVector(0,0,5000));
+             G->SetDepthPrototypePresentation(false,2,true,true,true); CheckVisibility(true);
+             G->SetDepthPrototypePresentation(true,2,true,true,true); CheckVisibility(true);
+             int32 DepthSections=0;
+             for (const auto& Pair:G->DecorationChunks) if (auto* Mesh=G->UndergroundChunks.FindRef(Pair.Key).Get())
+             {
+                 for (const auto& Plan:Pair.Value.DepthPrototypePlans) { ++DepthSections; TestTrue(TEXT("Stage 2 enables generated section"),Mesh->IsMeshSectionVisible(Plan.Key)); }
+                 for (int32 Old:Pair.Value.DepthPrototypeReplacedSections) TestFalse(TEXT("Stage 2 hides replaced section"),Mesh->IsMeshSectionVisible(Old));
+             }
+             AddInfo(FString::Printf(TEXT("DEPTH_SECTIONS audited=%d"),DepthSections));
+             G->SetDepthPrototypePresentation(true,0,true,true,true); CheckVisibility(true);
+             for (const auto& Pair:G->DecorationChunks) if (auto* Mesh=G->UndergroundChunks.FindRef(Pair.Key).Get())
+                 for (const auto& Plan:Pair.Value.DepthPrototypePlans) TestTrue(TEXT("Zero formations retains only backing"),Mesh->IsMeshSectionVisible(Plan.Key)==(Plan.Value==2));
+             G->SetDepthPrototypePresentation(false,2,true,true,true); CheckVisibility(true);
+             for (const auto& Pair:G->DecorationChunks) if (auto* Mesh=G->UndergroundChunks.FindRef(Pair.Key).Get())
+             {
+                 for (const auto& Plan:Pair.Value.DepthPrototypePlans) TestFalse(TEXT("Stage 1 hides generated section"),Mesh->IsMeshSectionVisible(Plan.Key));
+                 for (int32 Old:Pair.Value.DepthPrototypeReplacedSections) TestTrue(TEXT("Stage 1 restores original rear wall"),Mesh->IsMeshSectionVisible(Old));
+             }
             for (const auto& Pair:CollisionBefore) TestTrue(TEXT("Visibility never changes collision"),Pair.Key->GetCollisionEnabled()==Pair.Value);
             // A newly built chunk inherits the active layer, even before the next camera update.
             const float Size=G->Settings.ChunkLengthMetres*100;
