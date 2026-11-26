@@ -1054,7 +1054,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
 #else
     WorldGenerator->SetVisualMaskPassEnabled(bV2);
 #endif
-    FVector RefView; FRotator RefRotation; float RefW=0,RefH=0;
+    FVector RefView=FVector::ZeroVector; FRotator RefRotation=FRotator::ZeroRotator; float RefW=0,RefH=0;
     const bool bReferenceView=GetView(RefView,RefRotation,RefW,RefH);
     const APawn* RefPawn=UGameplayStatics::GetPlayerPawn(this,0);
     WorldGenerator->UpdateCaveReference(Profile,bV2 && bHasIndependentCaveAsset && bReferenceView && RefPawn && !Profile.bCompareStage1,

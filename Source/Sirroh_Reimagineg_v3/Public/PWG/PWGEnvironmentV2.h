@@ -383,7 +383,19 @@ public:
     bool IsDepthAtmosphereActive() const;
     void RefreshVisualProfile();
     void ResetVisualProfileToDemo() { ApplyVisualPreset(1); }
-    void ApplyVisualPreset(int32 Index) { VisualProfile=FPWGVisualProfile::DemoPreset(Index); RefreshVisualProfile(); }
+    void ApplyVisualPreset(int32 Index)
+    {
+        const FPWGVisualProfile Before=VisualProfile;
+        VisualProfile=FPWGVisualProfile::DemoPreset(Index);
+        if(Index!=3 && Before.bCaveReference)
+        {
+            VisualProfile.bCaveReference=true;
+            VisualProfile.CaveVisualDepthMetres=Before.CaveVisualDepthMetres;
+            VisualProfile.bShowCaveNear=Before.bShowCaveNear; VisualProfile.bShowCaveMid=Before.bShowCaveMid;
+            VisualProfile.bShowCaveFar=Before.bShowCaveFar; VisualProfile.bShowCaveClosure=Before.bShowCaveClosure;
+        }
+        RefreshVisualProfile();
+    }
     FString GetVisualProfileStatus() const;
 
     /** Runtime override; not serialized into the world plan. */

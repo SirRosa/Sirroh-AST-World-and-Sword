@@ -98,7 +98,15 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
         && FMath::Abs(LocalView.Z-CaveReferenceAnchor.Z)<=CaveReferenceHeight*.28
         && Width<=CaveReferenceWidth*1.15f && Height<=CaveReferenceHeight*1.15f;
     if(bWanted && (!IsValid(CaveReferenceMesh) || CaveReferenceDepth!=Profile.CaveVisualDepthMetres*100.f))
-        bWanted=BuildCaveReference(Pawn,Profile.CaveVisualDepthMetres*100.f);
+    {
+        // Do not retry missing assets on every tick. Toggling the reference resets the latch.
+        if(CaveReferenceDepth<0.f) bWanted=false;
+        else if(!BuildCaveReference(Pawn,Profile.CaveVisualDepthMetres*100.f))
+        {
+            CaveReferenceDepth=-1.f; bWanted=false;
+            UE_LOG(LogTemp,Error,TEXT("VF_CAVE_REFERENCE failed to build; Stage 1 retained"));
+        }
+    }
     if(IsValid(CaveReferenceMesh))
     {
         if(CaveReferenceMesh->IsVisible()!=bWanted) CaveReferenceMesh->SetVisibility(bWanted);
