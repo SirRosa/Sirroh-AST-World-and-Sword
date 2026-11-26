@@ -26,6 +26,7 @@ NEW_SCALARS = {
     'DepthGradeTintStrength':.45,'DepthGradeFog':.75,'DepthLayerDebug':0.0,
     'DepthLayerSpan':290.0,'DepthLayerActive':0.0,
     'CaveReferenceActive':0.0,'CaveReferenceStart':165.0,'CaveReferenceDepth':2200.0,
+    'CaveHaze0':.24,'CaveHaze1':.56,'CaveHaze2':.83,'CaveHaze3':.98,
 }
 NEW_VECTORS = {
     'ProfileOrigin':(0,0,0,0),
@@ -64,7 +65,8 @@ float protect=smoothstep(0.32,0.85,peak);
 float d=dot(World.xyz-ProfileOrigin.xyz,DepthAxis.xyz);
 float caveQ=(d-CaveReferenceStart)/max(CaveReferenceDepth,500.0);
 float isCave=(CaveReferenceActive>0.5 && caveQ>=0.0 && caveQ<1.03)?1.0:0.0;
-float4 planGrade=caveQ<.23?CaveGrade0:caveQ<.51?CaveGrade1:caveQ<.80?CaveGrade2:CaveGrade3;
+float3 planGrade=caveQ<.23?CaveGrade0.rgb:caveQ<.51?CaveGrade1.rgb:caveQ<.80?CaveGrade2.rgb:CaveGrade3.rgb;
+float planHaze=caveQ<.23?CaveHaze0:caveQ<.51?CaveHaze1:caveQ<.80?CaveHaze2:CaveHaze3;
 float3 planTint=caveQ<.23?CaveTint0.rgb:caveQ<.51?CaveTint1.rgb:caveQ<.80?CaveTint2.rgb:CaveTint3.rgb;
 if (DepthLayerDebug>0.5)
 {
@@ -108,7 +110,7 @@ if (isCave>0.5)
     // real illumination remains in the lit source, and Dark Cave has no haze floor.
     float3 rock=pow(max(src,0.0),max(planGrade.y,.4))*max(planGrade.x,0.0);
     rock=lerp(dot(rock,weights).xxx,rock,saturate(planGrade.z))*max(planTint,0.0);
-    float haze=saturate(planGrade.w)*saturate(ProfileBackgroundAmbient/.075)*saturate(ProfileFogStrength/.4);
+    float haze=saturate(planHaze)*saturate(ProfileBackgroundAmbient/.075)*saturate(ProfileFogStrength/.4);
     float3 target=max(ProfileAtmosphereColor.rgb,0.0)*max(planTint,0.0)*max(planGrade.x,0.0);
     bg=lerp(rock,target,haze*(1.0-protect));
 }

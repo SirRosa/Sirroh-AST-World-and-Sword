@@ -1155,6 +1155,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
                     const auto& G=Profile.CaveGrade(I);
                     Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveGrade%d"),I),FLinearColor(G.Brightness,G.Contrast,G.Saturation,G.Haze));
                     Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveTint%d"),I),G.Tint);
+                    Scalar(*FString::Printf(TEXT("CaveHaze%d"),I),G.Haze);
                 }
             LastProfileUniforms=Profile;
             LastProfileOrigin=ProfileOrigin;
