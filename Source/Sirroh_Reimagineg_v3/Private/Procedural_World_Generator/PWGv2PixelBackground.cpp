@@ -5,6 +5,7 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/PlatformTime.h"
+#include "Async/ParallelFor.h"
 
 float APWGv2Generator::GetPixelBackgroundStart() const
 {
@@ -130,12 +131,13 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
         const int32 H=FMath::CeilToInt(Box.Max.Z/Cell)-GZ+1;
         if(H<1 || H>4096 || int64(W)*H>4194304) return false;
         TArray<FColor> Data;Data.SetNumUninitialized(W*H);
-        for(int32 J=0;J<H;++J)
+        FColor* Pixels=Data.GetData();
+        ParallelFor(H,[&](int32 J)
         {
             const double Z=(GZ+J+.5)*Cell;
             for(int32 I=0;I<W;++I)
-                Data[J*W+I]=PWGPixelField::Paint(Columns[Tile.Plan][I],(GX+I+.5)*Cell,Z,Tile.Plan,Seed,S);
-        }
+                Pixels[J*W+I]=PWGPixelField::Paint(Columns[Tile.Plan][I],(GX+I+.5)*Cell,Z,Tile.Plan,Seed,S);
+        });
         UTexture2D* Tex=UTexture2D::CreateTransient(W,H,PF_B8G8R8A8);
         if(!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num()==0) return false;
         Tex->SRGB=false;Tex->NeverStream=true;Tex->Filter=TF_Nearest;
