@@ -84,13 +84,27 @@ UMaterialInstanceDynamic* APWGv2Generator::TerrainMaterialAt(float X,bool Cover,
     AtlasMaterials.Add(Key,M); return M;
 }
 
-UMaterialInstanceDynamic* APWGv2Generator::WallMaterial(int32 Layer,bool Cover,bool Entrance)
+UMaterialInstanceDynamic* APWGv2Generator::WallMaterial(int32 Layer,bool Cover,bool Entrance,bool SolidCutaway)
 {
     const auto& L=WorldData->Layers[Layer-1];
     const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(L.WallTexture,TEXT("Cave wall"),false):nullptr;
     FPWGv2AtlasPart Texture=L.Atlas;
     FLinearColor Tint=L.WallTint;
     if (Row) { Texture=FPWGv2AtlasPart(); Texture.Texture=Row->Texture; Tint*=Row->Tint*Row->Brightness; }
+    if (SolidCutaway)
+    {
+        const FString Key=FString::Printf(TEXT("SolidCutaway:%d"),Layer);
+        if (auto* Found=AtlasMaterials.Find(Key)) return *Found;
+        auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_SolidCutaway.M_PWGv2_SolidCutaway"));
+        if (!Base)
+        {
+            UE_LOG(LogTemp,Error,TEXT("PWG: missing M_PWGv2_SolidCutaway; run Source/Tools/create_pwg_cutaway_material.py"));
+            return AtlasMaterial(Texture,Tint*FLinearColor(.85f,.85f,.85f,1.f),true);
+        }
+        auto* M=UMaterialInstanceDynamic::Create(Base,this);
+        SetAtlas(M,Texture,TEXT("")); M->SetVectorParameterValue(TEXT("Tint"),Tint);
+        AtlasMaterials.Add(Key,M); return M;
+    }
     if (!Cover) return AtlasMaterial(Texture,Tint,true);
     const FString Key=FString::Printf(TEXT("TunnelCover:%d:%d"),Layer,int32(Entrance));
     if (auto* Found=AtlasMaterials.Find(Key)) return *Found;

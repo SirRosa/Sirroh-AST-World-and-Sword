@@ -11,6 +11,7 @@
 #include "Misc/Paths.h"
 #include "POI/POIShaft.h"
 #include "ProceduralMeshComponent.h"
+#include "Materials/Material.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Procedural_World_Generator/PWGProceduralTree.h"
 
@@ -128,7 +129,9 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     const auto* Part=Mesh->GetProcMeshSection(S);
                     if (!Part || Part->ProcVertexBuffer.IsEmpty()) continue;
                     TestFalse(TEXT("Solid cutaway has no section collision"),Part->bEnableCollision);
-                    TestTrue(TEXT("Solid cutaway uses layer wall material"),Mesh->GetMaterial(S)==G->WallMaterial(L));
+                    auto* MaskMaterial=Mesh->GetMaterial(S);
+                    TestTrue(TEXT("Solid cutaway uses dedicated gradient material"),MaskMaterial && MaskMaterial==G->WallMaterial(L,false,false,true) && MaskMaterial!=G->WallMaterial(L));
+                    TestTrue(TEXT("Solid cutaway parent shader is not the ordinary tiled shader or fallback"),MaskMaterial && MaskMaterial->GetMaterial() && MaskMaterial->GetMaterial()->GetName()==TEXT("M_PWGv2_SolidCutaway"));
                     for (const auto& V:Part->ProcVertexBuffer)
                     {
                         ShadeMin=FMath::Min(ShadeMin,int32(V.Color.R)); ShadeMax=FMath::Max(ShadeMax,int32(V.Color.R));
@@ -192,9 +195,9 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             }
             TestTrue(TEXT("Audit contains actual cutaway quads and rooms"),MaskQuads>0 && OpenSamples>0 && SolidSamples>0);
             // Accept either linear or sRGB vertex conversion; verify genuine gradient and darker baseline.
-            const FLinearColor Edge(.65f*.85f,.65f*.85f,.65f*.85f);
+            const FLinearColor Edge(.85f,.85f,.85f);
             TestTrue(TEXT("Mask has distance shading"),ShadeMax-ShadeMin>30 && ShadeMin>0);
-            TestTrue(TEXT("Mask edge is approximately 15 percent darker than prior mask"),FMath::Abs(ShadeMax-int32(Edge.ToFColor(false).R))<=2 || FMath::Abs(ShadeMax-int32(Edge.ToFColor(true).R))<=2);
+            TestTrue(TEXT("Mask edge multiplier is approximately 85 percent of normal wall"),FMath::Abs(ShadeMax-int32(Edge.ToFColor(false).R))<=2 || FMath::Abs(ShadeMax-int32(Edge.ToFColor(true).R))<=2);
             AddInfo(FString::Printf(TEXT("SOLID_SHADE vertex_min=%d vertex_max=%d"),ShadeMin,ShadeMax));
             AddInfo(FString::Printf(TEXT("SOLID_CUTAWAY quads=%d room_samples=%d shaft_samples=%d solid_samples=%d"),MaskQuads,OpenSamples,ShaftSamples,SolidSamples));
             // Exercise both domain changes and the no-frustum (debug/perspective) path.

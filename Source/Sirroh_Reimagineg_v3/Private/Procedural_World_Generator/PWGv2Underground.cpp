@@ -471,7 +471,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     // Bake ambient falloff into the foreground mask only. Measure distance in X/Z
     // to the nearest actual room or shaft opening, not the current player or camera.
     constexpr float ShadeRange=600.f, ShadeStep=100.f;
-    constexpr float EdgeShade=0.65f*0.85f; // 15% darker than the previous mask baseline.
+    constexpr float EdgeShade=0.85f; // dedicated material multiplies the ordinary biome wall color by this factor
     constexpr float DeepShade=0.35f; // relative to the edge, reached after six metres.
     const float ShadeStart=FMath::Max(WorldData->Regions[0].StartX,Start-ShadeRange-ShadeStep);
     const float ShadeEnd=FMath::Min(WorldData->Regions.Last().EndX,End+ShadeRange+ShadeStep);
@@ -582,7 +582,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             for (auto& UV:Mask.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);
         const int32 Section=SolidCutawaySectionBase+Layer-1;
         Mask.Submit(Mesh,Section); // Submit never creates collision; existing hulls are unchanged.
-        Mesh->SetMaterial(Section,WallMaterial(Layer)); // opaque biome wall texture, not translucent cutaway material
+        Mesh->SetMaterial(Section,WallMaterial(Layer,false,false,true)); // dedicated opaque shader consumes interpolated vertex RGB
     }
     int32 POISection=SolidCutawaySectionBase+4;
     for (auto& Pair:POIWallBuffers) { Pair.Value.Submit(Mesh,POISection); Mesh->SetMaterial(POISection++,POIWallMaterials[Pair.Key]); }
