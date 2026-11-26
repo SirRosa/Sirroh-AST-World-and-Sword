@@ -24,7 +24,11 @@ for prop in (mp.MP_EMISSIVE_COLOR, mp.MP_BASE_COLOR):
     n = me.get_material_property_input_node(source, prop)
     if n:
         original_outputs[str(prop)] = n.get_class().get_name()
-assert not ea.does_asset_exist(target_path), 'Target already exists; inspect and back it up before editing'
+if ea.does_asset_exist(target_path):
+    # Retry is permitted only after the deployment script has backed up the new asset
+    # from this task's failed authoring attempt. Never touch the source material.
+    assert (out / 'M_PWGv2_SolidCutaway.before-retry.uasset').exists(), 'Existing target is not backed up'
+    assert ea.delete_asset(target_path), 'Could not remove the incomplete generated target'
 # Preserve every existing atlas/tiling expression if it is independent of vertex color.
 # Otherwise explicitly reconstruct the established tiled shader, avoiding double shading.
 clone = bool(original_outputs) and source_vertex_nodes == 0
@@ -56,7 +60,7 @@ if clone:
         pin = me.get_material_property_input_node_output_name(mat, prop) or ''
         shaded = node(unreal.MaterialExpressionMultiply, 100, 150 if prop == mp.MP_EMISSIVE_COLOR else -150)
         connect(original, pin, shaded, 'A')
-        connect(vertex, 'RGB', shaded, 'B')
+        connect(vertex, '', shaded, 'B')
         output(shaded, '', prop)
         shaded_outputs.append((prop, shaded))
 else:
@@ -93,7 +97,7 @@ else:
     connect(tint, 'RGB', color, 'B')
     shaded = node(unreal.MaterialExpressionMultiply, 300, -100)
     connect(color, '', shaded, 'A')
-    connect(vertex, 'RGB', shaded, 'B')
+    connect(vertex, '', shaded, 'B')
     output(shaded, '', mp.MP_EMISSIVE_COLOR)
     shaded_outputs.append((mp.MP_EMISSIVE_COLOR, shaded))
 assert shaded_outputs
