@@ -19,14 +19,14 @@ namespace PWGIndependentCave
     inline void Rock(FPWGv2MeshBuffers& B,FRandomStream& R,double X,double Y,double Z,
         double H,double RX,double RY,double Lean,double Bottom,double Top,double Repeat,int32 Sides=9)
     {
-        constexpr int32 Rings=8;
-        FVector V[Rings][12]; FVector2D UV[Rings][12];
+        constexpr int32 Rings=17;
+        FVector V[Rings][24], Norm[Rings][24]; FVector2D UV[Rings][24];
         const double Phase=R.FRandRange(0.f,2.f*PI);
         const double Phase2=R.FRandRange(0.f,2.f*PI);
         const double U0=R.FRandRange(0.f,32.f), V0=R.FRandRange(0.f,32.f);
         const double Turn=R.FRandRange(-.45f,.45f);
         const double Jitter=R.FRandRange(.12f,.27f);
-        Sides=FMath::Clamp(Sides,5,12);
+        Sides=FMath::Clamp(Sides*2,14,24);
         for(int32 K=0;K<Rings;++K)
         {
             const double T=double(K)/(Rings-1);
@@ -37,21 +37,34 @@ namespace PWGIndependentCave
             for(int32 J=0;J<Sides;++J)
             {
                 const double A=double(J)*2.0*PI/Sides;
-                const double Lobe=1.0+Jitter*FMath::Sin(3.0*A+Phase)+.12*FMath::Cos(5.0*A+Phase2+T*3.0);
+                const double Lobe=1.0+Jitter*FMath::Sin(3.0*A+Phase+T*1.5)+.12*FMath::Cos(5.0*A+Phase2+T*3.0)
+                    +.055*FMath::Sin(9.0*A+Phase-T*8.0)+.04*FMath::Cos(13.0*A+T*11.0+Phase2);
                 const double Angle=A+Turn*T+Phase;
                 V[K][J]=FVector(CentreX+RX*Radius*Lobe*FMath::Cos(Angle),
                     CentreY+RY*Radius*Lobe*FMath::Sin(Angle),Z+H*T+H*.025*FMath::Sin(A+T*PI+Phase2));
                 UV[K][J]=FVector2D(U0+double(J)/Sides*RX*Repeat/45.0,V0+T*H*Repeat/100.0);
             }
         }
+        // Smooth shared ring normals, retaining the actual irregular rock outline.
+        for(int32 K=0;K<Rings;++K) for(int32 J=0;J<Sides;++J)
+        {
+            const FVector Around=V[K][(J+1)%Sides]-V[K][(J+Sides-1)%Sides];
+            const FVector Along=V[FMath::Min(K+1,Rings-1)][J]-V[FMath::Max(0,K-1)][J];
+            Norm[K][J]=FVector::CrossProduct(Around,Along).GetSafeNormal();
+        }
+        auto SmoothTri=[&](FVector A,FVector C,FVector D,FVector2D U,FVector2D V0,FVector2D W,FVector N0,FVector N1,FVector N2)
+        {
+            const int32 I=B.N.Num(); Tri(B,A,C,D,U,V0,W);
+            if(B.N.Num()==I+3){B.N[I]=N0; B.N[I+1]=N1; B.N[I+2]=N2;}
+        };
         for(int32 K=0;K<Rings-1;++K)
             for(int32 J=0;J<Sides;++J)
             {
                 const int32 N=(J+1)%Sides;
                 const FVector2D U=UV[K][J],U1=N?UV[K][N]:UV[K][N]+FVector2D(RX*Repeat/45.0,0);
                 const FVector2D W=UV[K+1][J],W1=N?UV[K+1][N]:UV[K+1][N]+FVector2D(RX*Repeat/45.0,0);
-                Tri(B,V[K][J],V[K][N],V[K+1][N],U,U1,W1);
-                Tri(B,V[K][J],V[K+1][N],V[K+1][J],U,W1,W);
+                SmoothTri(V[K][J],V[K][N],V[K+1][N],U,U1,W1,Norm[K][J],Norm[K][N],Norm[K+1][N]);
+                SmoothTri(V[K][J],V[K+1][N],V[K+1][J],U,W1,W,Norm[K][J],Norm[K+1][N],Norm[K+1][J]);
             }
         for(int32 K:{0,Rings-1})
         {
@@ -88,12 +101,12 @@ namespace PWGIndependentCave
         Form(0,.44,-.30,.49,.115,-.12,1.18,.04,9);
         Form(0,.31,.60,1.42,.105,.12,.035,1.15,8);
         Form(1,-.23,-.35,.93,.071,.085,.96,.48,9);
-        Form(1,.17,-.38,1.43,.060,-.055,.90,.77,8);
+        Form(1,.17,-.38,1.43,.049,-.055,.90,.77,8);
         Form(1,-.05,.62,1.38,.085,-.065,.04,1.12,9);
         Form(1,.49,-.35,1.35,.115,-.06,1.0,.72,10);
         // L4: wider, lower-frequency distant silhouettes; irregular valley in the middle.
         Form(2,-.35,-.45,1.45,.19,.10,1.10,.75,8);
-        Form(2,-.02,-.40,.40,.16,.09,1.10,.06,7);
+        Form(2,-.02,-.40,.28,.13,.09,1.10,.06,7);
         Form(2,.22,.65,1.55,.14,.08,.04,1.20,8);
         Form(2,.40,-.42,1.22,.16,-.11,1.0,.47,9);
         // L5: very low-frequency closing surface, beyond all rock volumes.
