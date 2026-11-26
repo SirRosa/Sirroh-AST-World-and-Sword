@@ -647,7 +647,17 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     for (auto& Entry:ShaftWalls)
     {
         const int32 Layer=FMath::Abs(Entry.Key), Section=Entry.Key<0?9:12+Layer;
-        Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,AtlasMaterial(WorldData->Layers[Layer-1].Atlas,FLinearColor::White,true,false,true));
+        // Shaft lining and adjoining cave shell must sample the same existing wall
+        // material, tint and world-space texel scale. Previously the shaft used the
+        // floor atlas with white tint and default scale: a hard dark stripe at mouths.
+        // This is a visual-only correction; the hulls, portals and saved geometry stay intact.
+        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Shaft back scale"),false):nullptr)
+        {
+            const float Scale=100.f/FMath::Max(25.f,Row->TilingWorldSize);
+            for (auto& UV:Entry.Value.UV) UV*=Scale;
+        }
+        Entry.Value.Submit(Mesh,Section);
+        Mesh->SetMaterial(Section,WallMaterial(Layer,false,false,false,true));
     }
     for (auto& Entry:ShaftFronts)
     {
