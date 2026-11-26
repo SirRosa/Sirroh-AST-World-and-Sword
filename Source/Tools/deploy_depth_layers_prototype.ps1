@@ -10,7 +10,7 @@ $backup=Join-Path $d 'backup_9ed8af8'
 $commit='9ed8af86aceb9fa0a6dc9ccdb59e8141f6b0ae58'
 $root='Content/Systems/Procedural_World_Generator/PWG_v2'
 $newAsset="$root/M_PWGv2_DepthAtmosphere_DepthLayersPrototype.uasset"
-$save='Saved/SaveGames/PWGv2_asd.sav'
+$save='Saved/SaveGames/PWGv2_VF_POIProbe_20261126.sav'
 $probe='Saved/SaveGames/PWGv2_VF_DepthProbe_20261126.sav'
 $entries=@(
 @{Path='Source/Sirroh_Reimagineg_v3/Public/PWG/PWGEnvironmentV2.h';Old='239cd90b543a4924b3412744709a9ec41996b57f';New='3751e28fb4109fb65837add129239e9c294f3a19'},
@@ -27,6 +27,7 @@ $entries=@(
 )
 New-Item -ItemType Directory -Path $d,$stage,$backup -Force | Out-Null
 $result=Join-Path $d 'result.txt'
+if(Test-Path $result){Copy-Item $result (Join-Path $d ('result_before_'+(Get-Date -Format 'yyyyMMdd_HHmmss')+'.txt'))}
 "COMMIT=$commit" | Set-Content $result
 function Note([string]$s){$s | Add-Content $result; Write-Output $s}
 function GitHash([string]$f){$h=& git hash-object --no-filters $f;if($LASTEXITCODE -ne 0){throw "git hash failed: $f"};return $h.Trim()}
@@ -56,7 +57,7 @@ function Render([string]$name,[string[]]$extra,[string[]]$scenes,[string[]]$suff
 }
 try{
  CheckNoEditor
- foreach($rel in @("$root/M_PWGv2_DepthAtmosphere.uasset","$root/M_PWGv2_DepthAtmosphere_V2.uasset","$root/M_PWGv2_DepthAtmosphere_Semantic.uasset","$root/M_PWGv2_DepthAtmosphere_SemanticPOI.uasset",$save,'Saved/SaveGames/SirrohCharacter.sav')){
+ foreach($rel in @("$root/M_PWGv2_DepthAtmosphere.uasset","$root/M_PWGv2_DepthAtmosphere_V2.uasset","$root/M_PWGv2_DepthAtmosphere_Semantic.uasset","$root/M_PWGv2_DepthAtmosphere_SemanticPOI.uasset",$save,'Saved/SaveGames/PWGv2_Serrania.sav','Saved/SaveGames/SirrohCharacter.sav')){
   if(Test-Path (Join-Path $p $rel)){ $protected[$rel]=(Get-FileHash (Join-Path $p $rel) -Algorithm SHA256).Hash }
  }
  if(!$protected.ContainsKey($save)){throw 'Missing original world'}
