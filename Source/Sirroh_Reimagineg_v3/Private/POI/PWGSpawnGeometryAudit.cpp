@@ -148,10 +148,10 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             {
                 // Probe actual PNG face assignment, including optional caps and native mesh overrides.
                 auto* Image=LoadObject<UTexture2D>(nullptr,TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
-                auto* Original=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit.M_KitImageFit"));
-                TestTrue(TEXT("PNG probe assets exist"),Image && Original);
+                auto* OriginalPNGMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit.M_KitImageFit"));
+                TestTrue(TEXT("PNG probe assets exist"),Image && OriginalPNGMaterial);
                 Card->Settings.Kind=EPOIKitKind::AST;
-                Card->Settings.Image=Image; Card->Settings.TopImage=Image; Card->Settings.Material=Original;
+                Card->Settings.Image=Image; Card->Settings.TopImage=Image; Card->Settings.Material=OriginalPNGMaterial;
                 Card->RefreshAppearance();
                 TArray<UStaticMeshComponent*> Faces; Card->GetComponents<UStaticMeshComponent>(Faces);
                 int32 LitFaces=0;
@@ -161,10 +161,10 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     TestTrue(TEXT("Platform PNG face is Default Lit"),IsLit(Face->GetMaterial(0),TEXT("M_KitImageFit_LitBackground")));
                 }
                 TestEqual(TEXT("All three platform image faces tested"),LitFaces,3);
-                if (Image && Original && Faces.Num()>0)
+                if (Image && OriginalPNGMaterial && Faces.Num()>0)
                 {
                     auto* Face=Faces[0];
-                    auto* MID=UMaterialInstanceDynamic::Create(Original,Face);
+                    auto* MID=UMaterialInstanceDynamic::Create(OriginalPNGMaterial,Face);
                     const FLinearColor ExpectedTint(.2f,.4f,.6f,1.f),ExpectedRect(.1f,.2f,.7f,.6f);
                     MID->SetTextureParameterValue(TEXT("ImageTexture"),Image);
                     MID->SetVectorParameterValue(TEXT("Tint"),ExpectedTint);
