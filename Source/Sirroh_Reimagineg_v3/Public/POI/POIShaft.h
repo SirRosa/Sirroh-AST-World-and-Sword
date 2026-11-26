@@ -72,7 +72,7 @@ public:
     bool HasPendingBuild() const { return !PendingBlocks.IsEmpty(); }
     void ProcessPendingBuild();
     // Independent of distance dormancy: visual suppression must never pause simulation.
-    void SetLayerRenderHidden(bool bHidden);
+    void SetLayerRenderHidden(bool bHideLayer);
     bool IsLayerRenderHidden() const { return bLayerRenderHidden; }
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft") FPOIShaftRow Recipe;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft",meta=(ClampMin="150",ClampMax="30000")) float Height=900;
