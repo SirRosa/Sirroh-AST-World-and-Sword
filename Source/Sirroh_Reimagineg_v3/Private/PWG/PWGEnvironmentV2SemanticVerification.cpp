@@ -71,6 +71,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         G->SetBackgroundAuditIsolation(0);
         if(bCaveQA)
         {
+            VisualProfile.bCaveReference=false; RefreshVisualProfile();
             G->ResetCaveReference();
             // Existing tunnel, shaft, POI, larger natural chamber, deeper cave.
             VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?7:VisualProbeScene==7?8:9;
