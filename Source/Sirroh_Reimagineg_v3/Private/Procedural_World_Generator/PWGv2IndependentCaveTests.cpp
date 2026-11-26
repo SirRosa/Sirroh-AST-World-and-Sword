@@ -25,6 +25,17 @@ bool FPWGIndependentCaveTest::RunTest(const FString&)
             }
         }
     }
+    for(int32 K=0;K<6;++K)
+    {
+        FPWGv2MeshBuffers A,B;FRandomStream R(123),S(123);
+        PWGIndependentCave::Formation(A,R,static_cast<PWGIndependentCave::EFamily>(K),FVector(0,0,0),150,60,500);
+        PWGIndependentCave::Formation(B,S,static_cast<PWGIndependentCave::EFamily>(K),FVector(0,0,0),150,60,500);
+        TestTrue(TEXT("Each family produces deterministic closed solids"),!A.T.IsEmpty() && A.V==B.V && A.T==B.T);
+        TestTrue(TEXT("UV normals and material masks per vertex"),A.V.Num()==A.UV.Num() && A.V.Num()==A.N.Num() && A.V.Num()==A.C.Num());
+        bool bPlane=false,bSlope=false;
+        for(const FVector& N:A.N){bPlane|=FMath::Abs(N.Y)>.9;bSlope|=FMath::Abs(N.Y)<.7;}
+        TestTrue(TEXT("Planar and bevel faces coexist"),bPlane && bSlope);
+    }
     FPWGVisualProfile P=FPWGVisualProfile::DemoPreset(3);
     TestTrue(TEXT("Demo opts into independent scene"),P.bCaveReference && !P.bUseReliefCheckpoint);
     TestTrue(TEXT("Texture detail attenuates"),P.CaveNear.TextureIntensity>P.CaveMid.TextureIntensity && P.CaveMid.TextureIntensity>P.CaveFar.TextureIntensity && P.CaveFar.TextureIntensity>P.CaveClosure.TextureIntensity);

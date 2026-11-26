@@ -11,7 +11,7 @@ void APWGv2Generator::ResetCaveReference()
     if(IsValid(CaveReferenceMesh)) CaveReferenceMesh->DestroyComponent();
     CaveReferenceMesh=nullptr; CaveReferenceMaterials.Reset();
     for(float& V:CaveReferenceTextures) V=-1.f;
-    CaveReferenceFlatAlbedo=-1.f;
+    CaveReferenceFlatAlbedo=-1.f; CaveReferenceLastDebug=-1;
     CaveReferenceDepth=0.f;
     if(bWasActive) for(const auto& Pair:UndergroundChunks) ApplyChunkLayerVisibility(Pair.Key);
 }
@@ -57,7 +57,7 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth)
     int32 Vertices=0,Triangles=0;
     for(int32 I=0;I<4;++I)
     {
-        B[I].Submit(CaveReferenceMesh,I);
+        PWGIndependentCave::Submit(B[I],CaveReferenceMesh,I);
         CaveReferenceMesh->SetMaterial(I,CaveReferenceMaterials[I]);
         Vertices+=B[I].V.Num();Triangles+=B[I].T.Num()/3;
     }
@@ -117,6 +117,13 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
             for(const auto& M:CaveReferenceMaterials) if(IsValid(M))
                 M->SetVectorParameterValue(TEXT("CaveFlatAlbedo"),FLinearColor(Flat,Flat*1.06f,Flat*1.12f,1.f));
             CaveReferenceFlatAlbedo=Flat;
+        }
+        const int32 Debug=Profile.CaveMaterialDebug;
+        if(Debug!=CaveReferenceLastDebug)
+        {
+            for(const auto& M:CaveReferenceMaterials) if(IsValid(M))
+                M->SetScalarParameterValue(TEXT("CaveDebugMode"),float(Debug));
+            CaveReferenceLastDebug=Debug;
         }
         const bool Show[4]={Profile.bShowCaveNear,Profile.bShowCaveMid,Profile.bShowCaveFar,Profile.bShowCaveClosure};
         for(int32 I=0;I<4;++I)

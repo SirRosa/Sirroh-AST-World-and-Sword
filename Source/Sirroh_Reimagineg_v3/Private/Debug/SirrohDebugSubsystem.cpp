@@ -458,8 +458,9 @@ private:
             Group(TEXT("Procedural Depth Layers"),{TEXT("bCompareStage1"),TEXT("bEnableDepthGrading"),TEXT("DepthStart"),TEXT("DepthRange"),TEXT("DepthBrightness"),
                 TEXT("DepthContrast"),TEXT("DepthDesaturation"),TEXT("DepthTintStrength"),TEXT("DepthTint"),TEXT("DepthFog"),
                 TEXT("bEnableDepthLayers"),TEXT("DepthFormationCount"),TEXT("bShowDepthNear"),TEXT("bShowDepthMid"),TEXT("bShowDepthBacking"),TEXT("bVisualizeDepthLayers")});
-            Group(TEXT("Independent Cave Reference"),{TEXT("bCaveReference"),TEXT("CaveVisualDepthMetres"),TEXT("bShowCaveNear"),TEXT("bShowCaveMid"),
+            Group(TEXT("Independent Cave Reference"),{TEXT("bCaveReference"),TEXT("CaveVisualDepthMetres"),TEXT("CaveMaterialDebug"),TEXT("bShowCaveNear"),TEXT("bShowCaveMid"),
                 TEXT("bShowCaveFar"),TEXT("bShowCaveClosure"),TEXT("CaveNear"),TEXT("CaveMid"),TEXT("CaveFar"),TEXT("CaveClosure"),TEXT("bUseReliefCheckpoint")});
+            Label(TEXT("Material debug: 0 lit, 1 base color, 2 world normal, 3 UV."));
             Label(TEXT("Demo przypina fragment do aktualnego kadru pod ziemia. Po odejsciu wraca Stage 1; wylacz/wlacz bCaveReference by wybrac nowy kadr. bCompareStage1 = A/B. Glebokosc przebudowuje tylko scene referencyjna."));
             Group(TEXT("Diagnostyka"),{TEXT("bVisualizeMasks")});
             Label(TEXT("NeutralPadding / FrontRange: pola zgodnosci, nieaktywne w shaderze semantycznym."));

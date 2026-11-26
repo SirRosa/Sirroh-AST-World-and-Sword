@@ -1,5 +1,6 @@
 #pragma once
 #include "PWGv2Mesh.h"
+#include <initializer_list>
 
 // Independent solid geometry. The six families have different topologies and
 // silhouettes; none samples the old wall or uses a circular ring generator.
@@ -40,6 +41,8 @@ namespace PWGIndependentCave
         FVector2D Mean=FVector2D::ZeroVector;
         for(auto& V:P){V.X*=R.FRandRange(.91f,1.09f);V.Y*=R.FRandRange(.92f,1.08f);Mean+=V;}
         Mean/=P.Num();
+        double Area=0.;for(int32 I=0;I<P.Num();++I){const auto& A=P[I];const auto& B0=P[(I+1)%P.Num()];Area+=A.X*B0.Y-B0.X*A.Y;}
+        if(Area<0.)for(int32 I=0;I<P.Num()/2;++I)P.Swap(I,P.Num()-1-I);
         const double Bevel=R.FRandRange(.12f,.25f);
         TArray<FVector> F,M,G;
         for(const auto& V:P)

@@ -1124,7 +1124,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             Scalar(TEXT("ProfileNeutralWidth"),Neutral);
             Scalar(TEXT("ProfileBackRange"),Profile.BackRange);
             Scalar(TEXT("ProfileFrontRange"),Profile.FrontRange);
-            Scalar(TEXT("ProfileStrength"),Profile.Strength);
+            Scalar(TEXT("ProfileStrength"),Profile.CaveMaterialDebug>0 && Profile.bCaveReference?0.f:Profile.Strength);
             Scalar(TEXT("ProfileFogStrength"),Profile.FogStrength);
             Scalar(TEXT("ProfileDesaturation"),Profile.Desaturation);
             Scalar(TEXT("ProfileForegroundDarkness"),Profile.ForegroundDarkness);

@@ -214,6 +214,9 @@ struct FPWGVisualProfile
     // Opt-in, pinned reference fragment only; no world-wide rollout yet.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bCaveReference=false;
+    // 0=lit, 1=base color, 2=world normal, 3=UV. Diagnostic only.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="0",ClampMax="3"))
+    int32 CaveMaterialDebug=0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bUseReliefCheckpoint=false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="5.0",ClampMax="50.0",Units="m"))
@@ -264,11 +267,11 @@ struct FPWGVisualProfile
         else if(Index==3)
         {
             P.bCaveReference=true; P.bUseReliefCheckpoint=false;
-            P.AtmosphereColor=FLinearColor(.33f,.47f,.55f,1.f);
-            P.BackgroundAmbient=.095f; P.FogStrength=.56f;
-            P.CaveNear=FPWGCavePlanGrade(.70f,1.12f,.78f,.13f,.98f,FLinearColor(.76f,.84f,.90f,1));
-            P.CaveMid=FPWGCavePlanGrade(.94f,1.02f,.55f,.39f,.70f,FLinearColor(.84f,.91f,1.f,1));
-            P.CaveFar=FPWGCavePlanGrade(1.13f,.92f,.30f,.73f,.25f,FLinearColor(.93f,.98f,1.f,1));
+            P.AtmosphereColor=FLinearColor(.39f,.36f,.43f,1.f);
+            P.BackgroundAmbient=.085f; P.FogStrength=.48f;
+            P.CaveNear=FPWGCavePlanGrade(.98f,1.08f,.78f,.05f,1.f,FLinearColor(.95f,.91f,1.f,1));
+            P.CaveMid=FPWGCavePlanGrade(1.05f,1.02f,.55f,.30f,.72f,FLinearColor(.98f,.94f,1.f,1));
+            P.CaveFar=FPWGCavePlanGrade(1.17f,.92f,.30f,.66f,.27f,FLinearColor(.98f,.96f,1.f,1));
             P.CaveClosure=FPWGCavePlanGrade(1.30f,.90f,.12f,.95f,.025f,FLinearColor::White);
         }
         return P;
@@ -326,6 +329,7 @@ struct FPWGVisualProfile
         Out.DepthFog = Safe(DepthFog,Defaults.DepthFog,0.f,1.f);
         Out.DepthTint = Color(DepthTint,Defaults.DepthTint);
         Out.DepthFormationCount = FMath::Clamp(DepthFormationCount,0,2);
+        Out.CaveMaterialDebug=FMath::Clamp(CaveMaterialDebug,0,3);
         Out.CaveVisualDepthMetres=Safe(CaveVisualDepthMetres,Defaults.CaveVisualDepthMetres,5.f,50.f);
         auto Grade=[&](FPWGCavePlanGrade& V,const FPWGCavePlanGrade& D)
         {
@@ -369,7 +373,7 @@ struct FPWGVisualProfile
             && DepthBrightness == Other.DepthBrightness && DepthContrast == Other.DepthContrast
             && DepthDesaturation == Other.DepthDesaturation && DepthTintStrength == Other.DepthTintStrength
             && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers
-            && CaveNear==Other.CaveNear && CaveMid==Other.CaveMid && CaveFar==Other.CaveFar && CaveClosure==Other.CaveClosure;
+            && CaveMaterialDebug==Other.CaveMaterialDebug && bCaveReference==Other.bCaveReference && CaveNear==Other.CaveNear && CaveMid==Other.CaveMid && CaveFar==Other.CaveFar && CaveClosure==Other.CaveClosure;
     }
 };
 
