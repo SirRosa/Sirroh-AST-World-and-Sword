@@ -10,6 +10,8 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "POI/POIShaft.h"
+#include "POI/POIKitBlock.h"
+#include "Components/StaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Materials/Material.h"
 #include "Algo/BinarySearch.h"
@@ -117,6 +119,32 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     }
                 }
             }
+            // Test the real parent shaders on both generated procedural walls and kit cards.
+            auto IsLit=[](UMaterialInterface* M,const TCHAR* Name)
+            { return M && M->GetMaterial() && M->GetMaterial()->GetName()==Name && M->GetMaterial()->GetShadingModels().HasShadingModel(MSM_DefaultLit); };
+            int32 LitCaves=0,LitShafts=0,LitProjected=0,LitCards=0;
+            for (const auto& Pair:G->UndergroundChunks) if (auto* M=Pair.Value.Get())
+                for (int32 S=0;S<M->GetNumSections();++S)
+                {
+                    const auto* Part=M->GetProcMeshSection(S); if (!Part || Part->ProcVertexBuffer.IsEmpty()) continue;
+                    if (S>=5 && S<=8) { ++LitCaves; TestTrue(TEXT("Cave interior is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit"))); }
+                    else if (S==9 || (S>=13 && S<=16)) { ++LitShafts; TestTrue(TEXT("Shaft lining is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit"))); }
+                    else if (S>=G->SolidCutawaySectionBase+4) { ++LitProjected; TestTrue(TEXT("Projected POI background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_KitImageFit_LitBackground"))); }
+                }
+            // Direct card path is also exercised when this seed has only projected room backgrounds.
+            auto* Card=World->SpawnActor<APOIKitBlock>();
+            if (Card) { Card->Settings.Kind=EPOIKitKind::Background; Card->RefreshAppearance(); }
+            TestTrue(TEXT("Background probe spawned"),Card!=nullptr);
+            for (TActorIterator<APOIKitBlock> It(World);It;++It)
+            {
+                if (It->Settings.Kind!=EPOIKitKind::Background) continue;
+                TArray<UStaticMeshComponent*> Visuals; It->GetComponents<UStaticMeshComponent>(Visuals);
+                for (auto* V:Visuals) if (V && V->GetFName()==FName(TEXT("ImageOrBlock")))
+                { ++LitCards; TestTrue(TEXT("Kit background card is Default Lit"),IsLit(V->GetMaterial(0),TEXT("M_KitImageFit_LitBackground"))); }
+            }
+            if (Card) Card->Destroy();
+            TestTrue(TEXT("Audit contains lit cave and kit backgrounds"),LitCaves>0 && LitCards>0);
+            AddInfo(FString::Printf(TEXT("LIT_BACKGROUNDS cave=%d shaft=%d projected=%d cards=%d"),LitCaves,LitShafts,LitProjected,LitCards));
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
             int32 ShadeMin=255,ShadeMax=0,BlackVertices=0;

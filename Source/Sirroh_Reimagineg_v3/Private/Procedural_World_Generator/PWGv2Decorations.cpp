@@ -36,11 +36,11 @@ void SetAtlas(UMaterialInstanceDynamic* M,const FPWGv2AtlasPart& Part,const FStr
     M->SetVectorParameterValue(*FString(TEXT("UVOffset")+Suffix),FLinearColor(R.X,R.Y,0,0));
 }
 }
-UMaterialInstanceDynamic* APWGv2Generator::AtlasMaterial(const FPWGv2AtlasPart& Part,FLinearColor Tint,bool Tiled,bool TreeLighting)
+UMaterialInstanceDynamic* APWGv2Generator::AtlasMaterial(const FPWGv2AtlasPart& Part,FLinearColor Tint,bool Tiled,bool TreeLighting,bool LitBackground)
 {
-    const FString Key=Part.Texture.ToString()+Part.UV.ToString()+Tint.ToString()+(TreeLighting?TEXT("TreeLit"):(Tiled?TEXT("Tiled"):TEXT("Sprite")));
+    const FString Key=Part.Texture.ToString()+Part.UV.ToString()+Tint.ToString()+(LitBackground?TEXT("BackgroundLit"):TreeLighting?TEXT("TreeLit"):(Tiled?TEXT("Tiled"):TEXT("Sprite")));
     if (auto* Found=AtlasMaterials.Find(Key)) return *Found;
-    auto* Base=LoadObject<UMaterialInterface>(nullptr,TreeLighting?TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_TreeLit.M_PWGv2_TreeLit"):Tiled?TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_Tiled.M_PWGv2_Tiled"):TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_Sprite.M_PWGv2_Sprite"));
+    auto* Base=LoadObject<UMaterialInterface>(nullptr,LitBackground?TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_BackgroundLit.M_PWGv2_BackgroundLit"):TreeLighting?TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_TreeLit.M_PWGv2_TreeLit"):Tiled?TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_Tiled.M_PWGv2_Tiled"):TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_Sprite.M_PWGv2_Sprite"));
     auto* M=UMaterialInstanceDynamic::Create(Base?Base:PreviewMaterial,this);
     SetAtlas(M,Part,TEXT("")); M->SetVectorParameterValue(TEXT("Tint"),Tint);
     AtlasMaterials.Add(Key,M); return M;
@@ -84,7 +84,7 @@ UMaterialInstanceDynamic* APWGv2Generator::TerrainMaterialAt(float X,bool Cover,
     AtlasMaterials.Add(Key,M); return M;
 }
 
-UMaterialInstanceDynamic* APWGv2Generator::WallMaterial(int32 Layer,bool Cover,bool Entrance,bool SolidCutaway)
+UMaterialInstanceDynamic* APWGv2Generator::WallMaterial(int32 Layer,bool Cover,bool Entrance,bool SolidCutaway,bool LitBackground)
 {
     const auto& L=WorldData->Layers[Layer-1];
     const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(L.WallTexture,TEXT("Cave wall"),false):nullptr;
@@ -105,7 +105,7 @@ UMaterialInstanceDynamic* APWGv2Generator::WallMaterial(int32 Layer,bool Cover,b
         SetAtlas(M,Texture,TEXT("")); M->SetVectorParameterValue(TEXT("Tint"),Tint);
         AtlasMaterials.Add(Key,M); return M;
     }
-    if (!Cover) return AtlasMaterial(Texture,Tint,true);
+    if (!Cover) return AtlasMaterial(Texture,Tint,true,false,LitBackground);
     const FString Key=FString::Printf(TEXT("TunnelCover:%d:%d"),Layer,int32(Entrance));
     if (auto* Found=AtlasMaterials.Find(Key)) return *Found;
     auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_LandscapeCover.M_PWGv2_LandscapeCover"));

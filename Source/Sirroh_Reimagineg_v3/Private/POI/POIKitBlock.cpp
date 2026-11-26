@@ -237,6 +237,13 @@ void APOIKitBlock::RefreshAppearance()
     Visual->SetRelativeScale3D(Card?FVector(Size.X*ActorScale.X/100,Size.Z*ActorScale.Z/100,1):Size*ActorScale/100);
     UMaterialInterface* Material=Settings.Material.LoadSynchronous();
     if (!Material && Card) Material=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIPrototype/M_POIImage.M_POIImage"));
+    if (Settings.Kind==EPOIKitKind::Background)
+    {
+        // Background cards (including streamed authored shaft/room modules) use a
+        // non-emissive, diffuse shader. Keep platform/prop materials untouched.
+        if (auto* Lit=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit_LitBackground.M_KitImageFit_LitBackground"))) Material=Lit;
+        else UE_LOG(LogTemp,Error,TEXT("POI: missing lit background material"));
+    }
     Visual->SetMaterial(0,Material);
     UTexture2D* FrontImage=Settings.Image.LoadSynchronous();
     UTexture2D* CapImage=Settings.TopImage.LoadSynchronous();

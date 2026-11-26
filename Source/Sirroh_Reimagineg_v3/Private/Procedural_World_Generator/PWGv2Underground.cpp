@@ -190,7 +190,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         if (Row.UpperLayer<=0 || Row.ArtTheme.IsNull() || Pos.X+Row.Width*.5f<Start || Pos.X-Row.Width*.5f>End) continue;
         auto* Theme=Row.ArtTheme.LoadSynchronous();
         if (!Theme || !Theme->Backgrounds || Theme->Backgrounds->Images.IsEmpty()) continue;
-        auto* Base=Theme->Material.LoadSynchronous(); if (!Base) continue;
+        auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/POIKit/M_KitImageFit_LitBackground.M_KitImageFit_LitBackground"));
+        if (!Base) { UE_LOG(LogTemp,Error,TEXT("PWG: missing lit POI background material")); Base=Theme->Material.LoadSynchronous(); }
+        if (!Base) continue;
         FRandomStream Random(HashCombineFast(WorldData->Seed,P+0xB671));
         const auto& Pair=Theme->Backgrounds->Images[Random.RandRange(0,Theme->Backgrounds->Images.Num()-1)];
         auto* Texture=Pair.Side.LoadSynchronous(); if (!Texture) continue;
@@ -369,7 +371,8 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             for (auto& UV:NearShell.UV) UV*=Scale;
         }
         NearShell.Submit(Mesh,16+Layer); Mesh->SetMaterial(16+Layer,WallMaterial(Layer,true));
-        Backdrop.Submit(Mesh,Layer+4); Mesh->SetMaterial(Layer+4,WallMaterial(Layer));
+        // Only the actual cave interior receives scene lights; SolidEarth and the cutaway remain independent.
+        Backdrop.Submit(Mesh,Layer+4); Mesh->SetMaterial(Layer+4,WallMaterial(Layer,false,false,false,true));
         if (!SolidEarth.V.IsEmpty())
         {
             const int32 EarthSection=EarthSectionBase+Layer-1;
@@ -631,7 +634,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     for (auto& Entry:ShaftWalls)
     {
         const int32 Layer=FMath::Abs(Entry.Key), Section=Entry.Key<0?9:12+Layer;
-        Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,AtlasMaterial(WorldData->Layers[Layer-1].Atlas,FLinearColor::White,true));
+        Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,AtlasMaterial(WorldData->Layers[Layer-1].Atlas,FLinearColor::White,true,false,true));
     }
     for (auto& Entry:ShaftFronts)
     {

@@ -130,8 +130,8 @@ private:
     float PreferenceScore(const FPWGv2Preference& Preference, float X) const;
     void BiomeMix(float X, int32& A, int32& B, float& Alpha) const;
     UMaterialInstanceDynamic* TerrainMaterialAt(float X, bool Cover=false, bool Entrance=false, int32 Tile=4, int32 Landscape=0);
-    UMaterialInstanceDynamic* AtlasMaterial(const FPWGv2AtlasPart& Part, FLinearColor Tint, bool Tiled=false, bool TreeLighting=false);
-    UMaterialInstanceDynamic* WallMaterial(int32 Layer,bool Cover=false,bool Entrance=false,bool SolidCutaway=false);
+    UMaterialInstanceDynamic* AtlasMaterial(const FPWGv2AtlasPart& Part, FLinearColor Tint, bool Tiled=false, bool TreeLighting=false, bool LitBackground=false);
+    UMaterialInstanceDynamic* WallMaterial(int32 Layer,bool Cover=false,bool Entrance=false,bool SolidCutaway=false,bool LitBackground=false);
     void BuildDecorationsV2(int32 Index, float Start, float End);
     void PlanAuthoredPOIs();
     void PlanRoomChains(const TArray<FPOIShaftRow>& Pool, int32 Layer);
