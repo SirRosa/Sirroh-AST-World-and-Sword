@@ -316,6 +316,15 @@ void APWGv2Generator::SetDepthPrototypePresentation(bool bEnabled,int32 Formatio
 
 bool APWGv2Generator::IsDepthPrototypeSectionVisible(const FPWGv2DecorationBatch& Batch,int32 Section) const
 {
+    if (const int32* Plan=Batch.PixelPlans.Find(Section))
+        return IsPixelBackgroundActive() && Batch.bPixelReady && (*Plan==3 || *Plan<PixelPlanCount);
+    if (IsPixelBackgroundActive() && Batch.bPixelReady)
+    {
+        if ((Section>=5 && Section<=9) || (Section>=13 && Section<=16)) return false;
+        // Keep SolidEarth on the surface and whenever it is behind the closure.
+        const float EarthY=FMath::Min(Settings.BackgroundDepth,Settings.LaneSpacing+450.f);
+        if (IsEarthSection(Section) && EarthY<=GetPixelBackgroundStart()+GetPixelBackgroundSpan()) return false;
+    }
     if (SuppressCaveReferenceOriginal(Batch,Section)) return false;
     const bool bActive=IsDepthPrototypeActive();
     if (const int32* Plan=Batch.DepthPrototypePlans.Find(Section))

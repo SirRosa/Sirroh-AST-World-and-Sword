@@ -11,6 +11,12 @@ class UStaticMesh;
 class APWGEnvironmentV2;
 struct FPWGVisualProfile;
 
+struct FPWGPixelTile
+{
+    int32 Section=INDEX_NONE, Plan=0;
+    FBox Bounds=FBox(ForceInit);
+};
+
 USTRUCT()
 struct FPWGv2DecorationBatch
 {
@@ -26,6 +32,9 @@ struct FPWGv2DecorationBatch
     bool bVisualMasksBuilt=false;
     TMap<int32,int32> DepthPrototypePlans; // appended section -> near(0), mid(1), backing(2)
     TSet<int32> DepthPrototypeReplacedSections;
+    TArray<FPWGPixelTile> PixelTiles;
+    TMap<int32,int32> PixelPlans;
+    bool bPixelReady=false;
     UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Actors;
 };
 
@@ -47,6 +56,10 @@ public:
     bool IsCaveReferenceActive() const {return bCaveReferenceActive && bUndergroundView;}
     float GetCaveReferenceStart() const {return CaveReferenceStart;}
     float GetCaveReferenceDepth() const {return CaveReferenceDepth;}
+    void SetPixelBackgroundPresentation(const FPWGVisualProfile& Profile,bool bEnabled);
+    bool IsPixelBackgroundActive() const {return bUndergroundView && bPixelBackgroundActive && BackgroundAuditIsolation==0;}
+    float GetPixelBackgroundStart() const;
+    float GetPixelBackgroundSpan() const;
     bool IsDepthPrototypeActive() const { return bUndergroundView && bDepthPrototypeActive && BackgroundAuditIsolation==0; }
     // Reserved stencil roles for this pass, independent of physical lane.
     static constexpr int32 VisualRear=201;
@@ -180,6 +193,15 @@ private:
     void SyncVisualMasks(int32 Index);
     bool bVisualMaskPassEnabled=false;
     bool bDepthPrototypeActive=false;
+    bool bPixelBackgroundActive=false, bTriedPixelMaterial=false;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInterface> PixelBackgroundMaterial;
+    float PixelCellCm=4.f, PixelStructureScale=1.f, PixelDensity=.55f, PixelRoughness=.7f, PixelErosion=.65f, PixelDetail=.7f;
+    float PixelDepthGrade=1.f;
+    int32 PixelPlanCount=3, PixelPalette=0;
+    bool EnsurePixelBackgroundMaterial();
+    void BuildPixelBackground(int32 Index,float Start,float End,UProceduralMeshComponent* Mesh);
+    bool RepaintPixelBackground(int32 Index,UProceduralMeshComponent* Mesh);
+    void UpdatePixelMaterialParameters(int32 Index,UProceduralMeshComponent* Mesh);
     UPROPERTY(Transient) TObjectPtr<UProceduralMeshComponent> CaveReferenceMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> CaveReferenceMaterials;
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> CaveReferenceInstances;

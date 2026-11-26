@@ -788,6 +788,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         UE_LOG(LogTemp,Display,TEXT("VF_DEPTH_CHUNK index=%d sections=%d vertices=%d span=%.1f ms=%.3f"),
             Index,DepthBatch.DepthPrototypePlans.Num(),DepthVertices,DepthSpan,(FPlatformTime::Seconds()-DepthBuildStart)*1000.0);
 #endif
+    if (bUnified) BuildPixelBackground(Index,Start,End,Mesh);
     Mesh->SetCollisionConvexMeshes(Hulls);
     Mesh->SetCanEverAffectNavigation(Hulls.Num()>0);
     UndergroundChunks.Add(Index,Mesh);

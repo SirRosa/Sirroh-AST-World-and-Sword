@@ -211,6 +211,32 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
     bool bVisualizeDepthLayers = false;
 
+    // Global planar XZ data, independent of collision and saved topology.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D")
+    bool bProceduralPixel=true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0",ClampMax="3"))
+    int32 PixelPlanCount=3;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.5",ClampMax="2.5"))
+    float PixelStructureScale=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.1",ClampMax="0.9"))
+    float PixelDensity=.55f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="1.0"))
+    float PixelRoughness=.7f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="1.0"))
+    float PixelErosion=.65f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="1.0"))
+    float PixelDetail=.7f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="3.0",ClampMax="10.0",Units="cm"))
+    float PixelCellCm=4.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="1.0"))
+    float PixelDepthGrade=1.f;
+    // Real directional fill in lux; zero disables it. No emissive or additive haze.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="8.0"))
+    float PixelAmbientLux=2.5f;
+    // 0 auto by layer/biome, 1 shallow, 2 deep.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0",ClampMax="2"))
+    int32 PixelPalette=0;
+
     // Opt-in, pinned reference fragment only; no world-wide rollout yet.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bCaveReference=false;
@@ -252,6 +278,7 @@ struct FPWGVisualProfile
         FPWGVisualProfile P;
         if(Index==0)
         {
+            P.PixelAmbientLux=0.f;
             P.BackgroundBrightness=1.f; P.BackgroundContrast=1.f; P.BackgroundAmbient=0.f;
             P.bDisableBackgroundAmbient=true; P.FogStrength=0.f; P.Desaturation=.10f;
             P.BackgroundTint=FLinearColor::White; P.AtmosphereColor=FLinearColor(.35f,.36f,.42f,1.f);
@@ -264,6 +291,7 @@ struct FPWGVisualProfile
         }
         else if(Index==2)
         {
+            P.PixelPalette=1;
             P.BackgroundBrightness=3.8f; P.BackgroundContrast=.95f; P.BackgroundAmbient=.065f;
             P.BackgroundTint=FLinearColor(1.f,.82f,.62f,1.f); P.AtmosphereColor=FLinearColor(.70f,.46f,.28f,1.f);
             P.Desaturation=.45f; P.FogStrength=.30f; P.ForegroundTint=FLinearColor(.82f,.69f,.56f,1.f);
@@ -336,6 +364,16 @@ struct FPWGVisualProfile
         Out.DepthFog = Safe(DepthFog,Defaults.DepthFog,0.f,1.f);
         Out.DepthTint = Color(DepthTint,Defaults.DepthTint);
         Out.DepthFormationCount = FMath::Clamp(DepthFormationCount,0,2);
+        Out.PixelPlanCount=FMath::Clamp(PixelPlanCount,0,3);
+        Out.PixelPalette=FMath::Clamp(PixelPalette,0,2);
+        Out.PixelCellCm=Safe(PixelCellCm,Defaults.PixelCellCm,3.f,10.f);
+        Out.PixelStructureScale=Safe(PixelStructureScale,Defaults.PixelStructureScale,.5f,2.5f);
+        Out.PixelDensity=Safe(PixelDensity,Defaults.PixelDensity,.1f,.9f);
+        Out.PixelRoughness=Safe(PixelRoughness,Defaults.PixelRoughness,0.f,1.f);
+        Out.PixelErosion=Safe(PixelErosion,Defaults.PixelErosion,0.f,1.f);
+        Out.PixelDetail=Safe(PixelDetail,Defaults.PixelDetail,0.f,1.f);
+        Out.PixelDepthGrade=Safe(PixelDepthGrade,Defaults.PixelDepthGrade,0.f,1.f);
+        Out.PixelAmbientLux=Safe(PixelAmbientLux,Defaults.PixelAmbientLux,0.f,8.f);
         Out.CaveMaterialDebug=FMath::Clamp(CaveMaterialDebug,0,3);
         Out.CaveTextureAmbient=Safe(CaveTextureAmbient,Defaults.CaveTextureAmbient,0.f,1.f);
         Out.CaveVisualDepthMetres=Safe(CaveVisualDepthMetres,Defaults.CaveVisualDepthMetres,5.f,50.f);
@@ -650,6 +688,7 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StylizedDepthMaterial;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ActiveDepthMaterial;
     bool bTriedStylizedDepthAsset = false;
+    bool bHasPixelBackgroundAsset=false;
     bool bHasDepthPrototypeAsset = false;
     bool bHasIndependentCaveAsset=false;
     bool bLastCaveReferenceActive=false;

@@ -894,7 +894,10 @@ void APWGEnvironmentV2::UpdateCelestial(const float DeltaSeconds, const FVector&
 	const float ActiveSun = SunIntensity*SunAlpha;
 	const float ActiveMoon = MoonIntensity*MoonAlpha;
 	const float ActiveTotal = ActiveSun+ActiveMoon;
-	CameraFillLight->SetIntensity(bUndergroundView?2.5f:ActiveTotal*FMath::Max(0.0f,CameraLightFraction));
+    const auto* PixelGenerator=Cast<APWGv2Generator>(Generator);
+    const bool bPixelLit=PixelGenerator && PixelGenerator->IsPixelBackgroundActive();
+    const FPWGVisualProfile PixelProfile=VisualProfile.Sanitized();
+	CameraFillLight->SetIntensity(bUndergroundView?(bPixelLit?(PixelProfile.bDisableBackgroundAmbient?0.f:PixelProfile.PixelAmbientLux):2.5f):ActiveTotal*FMath::Max(0.0f,CameraLightFraction));
 	CameraFillLight->SetLightColor(bUndergroundView ? FLinearColor::White : ActiveTotal > KINDA_SMALL_NUMBER
 		? (SunLightColor*ActiveSun + MoonLightColor*ActiveMoon)/ActiveTotal
 		: MoonLightColor);
@@ -905,7 +908,7 @@ void APWGEnvironmentV2::UpdateCelestial(const float DeltaSeconds, const FVector&
 	const FVector CardNormal = Generator
 		? Generator->GetActorTransform().TransformVectorNoScale(-FVector::YAxisVector).GetSafeNormal()
 		: -FVector::YAxisVector;
-	CameraFillLight->SetWorldRotation(CardNormal.Rotation());
+	CameraFillLight->SetWorldRotation((bPixelLit?-CardNormal:CardNormal).Rotation());
 
 }
 
@@ -1024,6 +1027,15 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     {
         bTriedStylizedDepthAsset=true;
         if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_Pixel2D.M_PWGv2_DepthAtmosphere_Pixel2D")))
+        {
+            StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+            bHasPixelBackgroundAsset=IsValid(StylizedDepthMaterial);
+            bHasIndependentCaveAsset=bHasPixelBackgroundAsset;
+            bHasDepthPrototypeAsset=bHasPixelBackgroundAsset;
+        }
+        if (!StylizedDepthMaterial)
+        if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
             TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_CaveTexturedAmbient.M_PWGv2_DepthAtmosphere_CaveTexturedAmbient")))
         {
             StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
@@ -1065,9 +1077,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     FVector RefView=FVector::ZeroVector; FRotator RefRotation=FRotator::ZeroRotator; float RefW=0,RefH=0;
     const bool bReferenceView=GetView(RefView,RefRotation,RefW,RefH);
     const APawn* RefPawn=UGameplayStatics::GetPlayerPawn(this,0);
-    WorldGenerator->UpdateCaveReference(Profile,bV2 && bHasIndependentCaveAsset && bReferenceView && RefPawn && !Profile.bCompareStage1,
+    const bool bPixelWanted=bV2 && bHasPixelBackgroundAsset && Profile.bProceduralPixel && !Profile.bCompareStage1 && !Profile.bCaveReference && !Profile.bUseReliefCheckpoint;
+    WorldGenerator->SetPixelBackgroundPresentation(Profile,bPixelWanted);
+    const bool bPixelActive=WorldGenerator->IsPixelBackgroundActive();
+    if (bPixelActive && CameraFillLight)
+        CameraFillLight->SetIntensity(Profile.bDisableBackgroundAmbient?0.f:Profile.PixelAmbientLux);
+    WorldGenerator->UpdateCaveReference(Profile,!bPixelActive && bV2 && bHasIndependentCaveAsset && bReferenceView && RefPawn && !Profile.bCompareStage1,
         RefView,RefW,RefH,RefPawn?RefPawn->GetActorLocation():FVector::ZeroVector);
-    WorldGenerator->SetDepthPrototypePresentation(bV2 && bHasDepthPrototypeAsset && Profile.bUseReliefCheckpoint && !Profile.bCaveReference && Profile.bEnableDepthLayers && !Profile.bCompareStage1,
+    WorldGenerator->SetDepthPrototypePresentation(!bPixelActive && bV2 && bHasDepthPrototypeAsset && Profile.bUseReliefCheckpoint && !Profile.bCaveReference && Profile.bEnableDepthLayers && !Profile.bCompareStage1,
         Profile.DepthFormationCount,Profile.bShowDepthNear,Profile.bShowDepthMid,Profile.bShowDepthBacking);
     UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
     if (ActiveDepthMaterial.Get()!=Material)
@@ -1191,7 +1208,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             if(!bProfileUniformsInitialized || Depth!=LastCaveDepth) Scalar(TEXT("CaveReferenceDepth"),Depth);
             bLastCaveReferenceActive=bRef; LastCaveStart=Start; LastCaveDepth=Depth;
         }
-        const float NextMix=Profile.BlendSeconds<=KINDA_SMALL_NUMBER?1.f:
+        if (bHasPixelBackgroundAsset)
+        {
+            Scalar(TEXT("PixelMode"),bPixelActive?1.f:0.f);
+            Scalar(TEXT("PixelStart"),WorldGenerator->GetPixelBackgroundStart());
+            Scalar(TEXT("PixelSpan"),WorldGenerator->GetPixelBackgroundSpan());
+            Scalar(TEXT("PixelGradeStrength"),Profile.bEnableDepthGrading?Profile.PixelDepthGrade:0.f);
+        }
+        const float NextMix=bPixelActive || Profile.BlendSeconds<=KINDA_SMALL_NUMBER?1.f:
             FMath::FInterpConstantTo(ProfileMix,1.f,GetWorld()->GetDeltaSeconds(),1.f/Profile.BlendSeconds);
         if (!bProfileUniformsInitialized || NextMix!=ProfileMix)
             Scalar(TEXT("ProfileMix"),NextMix);
