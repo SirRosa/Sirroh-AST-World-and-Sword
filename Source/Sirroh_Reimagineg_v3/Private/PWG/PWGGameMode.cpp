@@ -208,27 +208,12 @@ bool APWGGameMode::StartGameAfterCharacterCreation()
         PC->Possess(NewPawn);
         USirrohCharacterIdentityComponent::ApplySaved(NewPawn);
     WorldGenerator->EnsureStarterSwordNear(SpawnLocation);
-    SpawnASTIntegrationObjects(SpawnLocation);
-    if (bSpawnCombatTrainingNPC && !IsValid(TrainingNavigationBounds))
-    {
-        TrainingNavigationBounds=World->SpawnActor<APWGNavigationBounds>(SpawnLocation,FRotator::ZeroRotator);
-        if (auto* Navigation=FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
-        {
-            Navigation->OnNavigationBoundsUpdated(TrainingNavigationBounds);
-            // Bounds updates are queued. Build after the navigation system has
-            // consumed them instead of building an empty tile set in this frame.
-            TWeakObjectPtr<UNavigationSystemV1> WeakNavigation=Navigation;
-            GetWorldTimerManager().SetTimerForNextTick([WeakNavigation]()
-            {
-                if (WeakNavigation.IsValid()) WeakNavigation->Build();
-            });
-        }
-    }
-
-
-
-
-    if (bSpawnCombatTrainingNPC && !IsValid(CombatTrainingNPC)) ResetTrainingNPC();
+    // Normal world entry never creates temporary acceptance-test stations or training NPCs.
+    // Explicit launch flags keep the test harness available, even with old Blueprint defaults.
+    if (FParse::Param(FCommandLine::Get(), TEXT("PWGSpawnASTTestObjects")))
+        SpawnASTIntegrationObjects(SpawnLocation);
+    if (bSpawnCombatTrainingNPC && FParse::Param(FCommandLine::Get(), TEXT("PWGSpawnTrainingNPC")) && !IsValid(CombatTrainingNPC))
+        ResetTrainingNPC();
 
         if (PC->PlayerCameraManager && SpawnFadeDuration > 0.0f)
         {
@@ -343,6 +328,22 @@ void APWGGameMode::ResetTrainingNPC()
     UClass* NPCClass=ASTCombatNPCClass.LoadSynchronous();
     if (!NPCClass) { UE_LOG(LogTemp,Error,TEXT("PWG: integrated AST NPC class is missing"));return; }
     Location.Z=Surface+95;
+    // Also initialize navigation when training is explicitly requested with NumPad0.
+    if (!IsValid(TrainingNavigationBounds))
+    {
+        TrainingNavigationBounds=GetWorld()->SpawnActor<APWGNavigationBounds>(Player->GetActorLocation(),FRotator::ZeroRotator);
+        if (auto* Navigation=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()); Navigation && IsValid(TrainingNavigationBounds))
+        {
+            Navigation->OnNavigationBoundsUpdated(TrainingNavigationBounds);
+            // Bounds updates are queued. Build after the navigation system has
+            // consumed them instead of building an empty tile set in this frame.
+            TWeakObjectPtr<UNavigationSystemV1> WeakNavigation=Navigation;
+            GetWorldTimerManager().SetTimerForNextTick([WeakNavigation]()
+            {
+                if (WeakNavigation.IsValid()) WeakNavigation->Build();
+            });
+        }
+    }
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
     CombatTrainingNPC=GetWorld()->SpawnActor<APawn>(NPCClass,Location,FRotator(0,180,0),Params);
