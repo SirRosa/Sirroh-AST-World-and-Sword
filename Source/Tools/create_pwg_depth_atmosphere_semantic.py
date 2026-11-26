@@ -30,8 +30,8 @@ NEW_VECTORS = {
 }
 OUT = unreal.MaterialProperty.MP_EMISSIVE_COLOR
 
-# Multiplicative, black-preserving grading. World position rather than Pawn Y
-# keeps all lanes invariant. Do not treat a post-tonemap value as light energy.
+# Stencil role + visible depth match, artistic rear-only ambient. Do not treat
+# post-tonemap display values as physical light energy.
 STYLE = r'''
 // SIRROH_VISUAL_FOUNDATION_SEMANTIC_V2
 float3 src=max(Scene.rgb,0.0);
@@ -52,14 +52,14 @@ float protect=smoothstep(0.32,0.85,peak);
 float d=dot(World.xyz-ProfileOrigin.xyz,DepthAxis.xyz);
 // Physical depth is only a continuous secondary atmospheric cue, not a gate.
 float distanceFog=saturate(max(d,0.0)/max(ProfileBackRange,20.0));
-float fog=saturate(ProfileFogStrength)*(0.65+0.35*distanceFog);
+float profileFog=saturate(ProfileFogStrength)*(0.65+0.35*distanceFog);
 float gain=max(ProfileBackgroundBrightness,0.0);
 // Monotonic shoulder: gain affects shadows, with no clipping of bright firelit detail.
 float3 curved=gain<=0.0?float3(0,0,0):1.0-pow(1.0-saturate(src),max(gain,0.001));
 curved=pow(max(curved,0.0),max(ProfileBackgroundContrast,0.4));
 float bgLum=dot(curved,weights);
 float3 bg=lerp(curved,bgLum.xxx,saturate(ProfileDesaturation))*max(ProfileBackgroundTint.rgb,0.0);
-bg=lerp(bg,bgLum.xxx*max(ProfileAtmosphereColor.rgb,0.0),fog*0.35);
+bg=lerp(bg,bgLum.xxx*max(ProfileAtmosphereColor.rgb,0.0),profileFog*0.35);
 float ambient=saturate(ProfileBackgroundAmbient)*(1.0-protect);
 // Additive term applies solely to visible tagged rear wall pixels. No lift elsewhere.
 bg=bg+ambient*max(ProfileAtmosphereColor.rgb,0.0)*(1.0-saturate(bgLum));
@@ -107,8 +107,19 @@ def main():
     existing=unreal.load_asset(DEST)
     if existing is not None:
         verify(existing)
-        if input_node(existing).get_editor_property('code').replace('\r\n','\n') != code.replace('\r\n','\n'):
-            raise RuntimeError('Existing V2 differs; back up and inspect before updating')
+        current=input_node(existing).get_editor_property('code')
+        if current.replace('\r\n','\n') != code.replace('\r\n','\n'):
+            # Only repair the exact prior iteration, and only with explicit backup flag.
+            expected_prior=code.replace('float profileFog=saturate(ProfileFogStrength)','float fog=saturate(ProfileFogStrength)').replace(',profileFog*0.35);',',fog*0.35);')
+            if '-VFRepairPriorSemantic' not in unreal.SystemLibrary.get_command_line() or current.replace('\r\n','\n') != expected_prior.replace('\r\n','\n'):
+                raise RuntimeError('Existing semantic asset differs; backup/inspect before updating')
+            input_node(existing).set_editor_property('code',code)
+            LIB.recompile_material(existing)
+            verify(existing)
+            if not unreal.EditorAssetLibrary.save_loaded_asset(existing,only_if_is_dirty=False):
+                raise RuntimeError('Cannot save repaired semantic asset')
+            unreal.log('VISUAL_FOUNDATION_V2_SAVED '+existing.get_path_name())
+            return
         unreal.log('VISUAL_FOUNDATION_V2_VERIFIED '+existing.get_path_name())
         return
     asset=unreal.AssetToolsHelpers.get_asset_tools().create_asset(NAME,ROOT,unreal.Material,unreal.MaterialFactoryNew())

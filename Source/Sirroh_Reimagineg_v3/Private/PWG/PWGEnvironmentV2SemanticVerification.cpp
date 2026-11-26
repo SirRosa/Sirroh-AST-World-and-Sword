@@ -166,7 +166,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             if (!bLit) { Fail(TEXT("actual torch has no active point light")); return; }
             // Freeze fire envelope/flicker for the A/B, not for normal gameplay.
             Torch->SetActorTickEnabled(false);
-            for (auto* Component:Torch->GetComponents()) if (Component) Component->SetComponentTickEnabled(false);
+            for (UActorComponent* Component:Torch->GetComponents()) if (Component) Component->SetComponentTickEnabled(false);
             break;
         }
         case 11: if (!Capture(TEXT("05_legacy_torch"))) return; break;
