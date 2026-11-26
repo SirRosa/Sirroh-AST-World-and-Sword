@@ -399,7 +399,7 @@ private:
     FVector VisualProbeCamera=FVector::ZeroVector;
     FRotator VisualProbeRotation=FRotator::ZeroRotator;
     float VisualProbeWidth=0.f;
-    UPROPERTY(Transient) TObjectPtr<AActor> VisualProbeTorch;
+    TWeakObjectPtr<AActor> VisualProbeTorch;
     int32 SkyVerificationFrame = 0;
 #endif
     void StartDynamicSky();

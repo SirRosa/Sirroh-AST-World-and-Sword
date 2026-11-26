@@ -55,7 +55,7 @@ float distanceFog=saturate(max(d,0.0)/max(ProfileBackRange,20.0));
 float fog=saturate(ProfileFogStrength)*(0.65+0.35*distanceFog);
 float gain=max(ProfileBackgroundBrightness,0.0);
 // Monotonic shoulder: gain affects shadows, with no clipping of bright firelit detail.
-float3 curved=1.0-pow(1.0-saturate(src),gain);
+float3 curved=gain<=0.0?float3(0,0,0):1.0-pow(1.0-saturate(src),max(gain,0.001));
 curved=pow(max(curved,0.0),max(ProfileBackgroundContrast,0.4));
 float bgLum=dot(curved,weights);
 float3 bg=lerp(curved,bgLum.xxx,saturate(ProfileDesaturation))*max(ProfileBackgroundTint.rgb,0.0);
