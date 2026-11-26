@@ -1,7 +1,6 @@
 #include "Algo/BinarySearch.h"
 #include "Procedural_World_Generator/PWGv2Generator.h"
 #include "PWG/PWGEnvironmentV2.h"
-#include "PWG/PWGLedgeActor.h"
 #include "Sword/SwordWorldSubsystem.h"
 #include "Sword/ProceduralSword.h"
 #include "PWGv2Mesh.h"
@@ -296,7 +295,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         const auto& Atlas=WorldData->Layers[Layer-1].Atlas;
         Mesh->SetMaterial(Layer,Atlas.Texture.IsNull()?TerrainMaterialAt((Start+End)/2):AtlasMaterial(Atlas,FLinearColor(0.5,0.5,0.6),true));
     }
-    TMap<int32,FPWGv2MeshBuffers> Platforms, ShaftWalls, ShaftFronts;
+    TMap<int32,FPWGv2MeshBuffers> ShaftWalls, ShaftFronts;
     for (const auto& Portal:WorldData->Portals)
     {
         if (Portal.X+Portal.Width/2<Start || Portal.X-Portal.Width/2>End) continue;
@@ -381,93 +380,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             }
             continue;
         }
-        if (Portal.Style!=EPWGv2EntranceStyle::Switchback) continue;
-        const int32 Steps=FMath::Max(1,FMath::CeilToInt((Upper-Lower)/150));
-        for (int32 Step=1;Step<=Steps;++Step)
-        {
-            const float Z=FMath::Lerp(Upper,Lower,float(Step)/Steps);
-            const bool Left=(Step%2)==1;
-            const float X0=FMath::Max(Start,Portal.X+(Left?-Portal.Width/2:60));
-            const float X1=FMath::Min(End,Portal.X+(Left?-60:Portal.Width/2));
-            if (X0>=X1) continue;
-            Slab(Platforms.FindOrAdd(Portal.LowerLayer),X0,X1,-50,50,Z,Z,30,FLinearColor(0.5,0.45,0.35),true);
-            // Only one chunk owns each real ledge, never a streaming seam.
-            const float Edge=Portal.X+(Left?-60:60);
-            if (Edge<Start || Edge>=End) continue;
-            const FVector Out=GetActorTransform().TransformVectorNoScale(Left?FVector::XAxisVector:-FVector::XAxisVector);
-            const FVector Front=GetActorTransform().TransformPosition(FVector(Edge,0,Z));
-            FActorSpawnParameters Params; Params.Owner=this;
-            auto* Ledge=GetWorld()->SpawnActor<APWGLedgeActor>(APWGLedgeActor::StaticClass(),Front,FRotator::ZeroRotator,Params);
-            if (Ledge)
-            {
-                Ledge->ConfigureLedge(Front-FVector(0,0,65),FVector(10,48,65),FTransform(Out.Rotation(),Front),FTransform((-Out).Rotation(),Front-Out*(Portal.Width/2-60)));
-                DecorationChunks.FindOrAdd(Index).Actors.Add(Ledge);
-            }
-        }
-    }
-    // Deterministic room modules: single mantle, two-step terrace, or paired jump blocks.
-    // All dimensions leave capsule headroom; every climb detector is on the far playable lane.
-    for (int32 Layer=1;Layer<=4;++Layer)
-    {
-        const float Room=WorldData->Layers[Layer-1].RoomLengthMetres*100;
-        for (int32 Cell=FMath::FloorToInt(Start/Room)-1;Cell<=FMath::FloorToInt(End/Room);++Cell)
-        {
-            const float Centre=(Cell+0.5f)*Room,Half=FMath::Min(350.f,Room*0.35f);
-            if (IsRoomChain(Layer,Centre,Half+200)) continue;
-            bool NearPortal=false;
-            for (const auto& P:WorldData->Portals)
-                if (Layer>=P.UpperLayer && Layer<=P.LowerLayer && FMath::Abs(Centre-P.X)<P.Width/2+Half+200) NearPortal=true;
-            if (NearPortal || (Layer==1 && RegionAt(Centre).Definition.EntranceStyle==EPWGv2EntranceStyle::None)) continue;
-            const float Floor=LayerFloor(Layer,Centre);
-            auto Block=[&](float Left,float Right,float Rise,bool LeftLedge=true,bool RightLedge=true,bool Floating=false)
-            {
-                const float X0=FMath::Max(Start,Left),X1=FMath::Min(End,Right),Z=Floor+Rise;
-                if (X0>=X1 || FMath::Min(LayerCeiling(Layer,Left),LayerCeiling(Layer,Right))-Z<220) return;
-                if (Layer==1 && (RegionAt(X0).Definition.EntranceStyle==EPWGv2EntranceStyle::None || RegionAt(X1).Definition.EntranceStyle==EPWGv2EntranceStyle::None)) return;
-                Slab(Platforms.FindOrAdd(Layer),X0,X1,Floating?-50:-Settings.LaneSpacing-50,50,Z,Z,Floating?30:Rise,FLinearColor::White,true);
-                for (int32 Side:{-1,1})
-                {
-                    if ((Side<0 && !LeftLedge) || (Side>0 && !RightLedge)) continue;
-                    const float Edge=Side<0?Left:Right; if (Edge<Start || Edge>=End) continue;
-                    const FVector Out=GetActorTransform().TransformVectorNoScale(FVector(Side,0,0));
-                    const FVector Front=GetActorTransform().TransformPosition(FVector(Edge,0,Z));
-                    FActorSpawnParameters Params; Params.Owner=this;
-                    auto* Ledge=GetWorld()->SpawnActor<APWGLedgeActor>(APWGLedgeActor::StaticClass(),Front,FRotator::ZeroRotator,Params);
-                    if (Ledge)
-                    {
-                        Ledge->ConfigureLedge(Front-FVector(0,0,60),FVector(10,48,60),FTransform(Out.Rotation(),Front),FTransform((-Out).Rotation(),Front-Out*(Right-Left)));
-                        DecorationChunks.FindOrAdd(Index).Actors.Add(Ledge);
-                    }
-                }
-            };
-            FRandomStream Module(HashCombineFast(HashCombineFast(WorldData->Seed,Layer),Cell));
-            if (Layer<=2)
-            {
-                if (Module.FRand()<0.65f)
-                {
-                    const float Branch=FMath::Min(220.f,Room*0.16f);
-                    Block(Centre-Branch-160,Centre-Branch,120,true,false,true);
-                    Block(Centre-Branch,Centre+Branch,240,true,true,true);
-                    Block(Centre+Branch,Centre+Branch+160,120,false,true,true);
-                }
-                continue;
-            }
-            switch (Module.RandRange(0,2))
-            {
-                case 0: Block(Centre-110,Centre+110,Module.FRandRange(100,150)); break;
-                case 1:
-                    Block(Centre-Half,Centre-120,120,true,false);
-                    Block(Centre-120,Centre+120,240);
-                    Block(Centre+120,Centre+Half,120,false,true); break;
-                default:
-                    Block(Centre-Half,Centre-70,120);
-                    Block(Centre+70,Centre+Half,120); break;
-            }
-        }
     }
     int32 POISection=25;
     for (auto& Pair:POIWallBuffers) { Pair.Value.Submit(Mesh,POISection); Mesh->SetMaterial(POISection++,POIWallMaterials[Pair.Key]); }
-    for (auto& Entry:Platforms) { Entry.Value.Submit(Mesh,8+Entry.Key); Mesh->SetMaterial(8+Entry.Key,AtlasMaterial(WorldData->Layers[Entry.Key-1].Atlas,FLinearColor::White,true)); }
     for (auto& Entry:ShaftWalls) { Entry.Value.Submit(Mesh,12+Entry.Key); Mesh->SetMaterial(12+Entry.Key,AtlasMaterial(WorldData->Layers[Entry.Key-1].Atlas,FLinearColor::White,true)); }
     for (auto& Entry:ShaftFronts)
     {
