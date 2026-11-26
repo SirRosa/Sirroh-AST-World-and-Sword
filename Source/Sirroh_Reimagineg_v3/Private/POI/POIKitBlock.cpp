@@ -290,3 +290,9 @@ void APOIKitBlock::RefreshAppearance()
     BottomVisual->SetRelativeLocation(FVector(0,0,-Size.Z-.1));
     BottomVisual->SetRelativeRotation(FRotator(0,0,180));
 }
+
+void APOIKitBlock::GetVisualMaskMeshes(TArray<UStaticMeshComponent*>& Out) const
+{
+    for(UStaticMeshComponent* Mesh:{Visual.Get(),TopVisual.Get(),BottomVisual.Get()})
+        if(IsValid(Mesh) && Mesh->GetStaticMesh()) Out.Add(Mesh);
+}

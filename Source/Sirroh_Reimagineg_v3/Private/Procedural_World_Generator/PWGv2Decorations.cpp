@@ -325,6 +325,7 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
             {
                 if (POI->ActorHasTag(TEXT("PWGSurfacePOI"))) POI->SetLayerRenderHidden(bUndergroundView);
                 else if (POI->ActorHasTag(TEXT("PWGUndergroundPOI"))) POI->SetLayerRenderHidden(!bUndergroundView);
+                POI->SetVisualMaskEnabled(IsVisualMaskPassEnabled());
             }
         }
         if (auto* Mesh=UndergroundChunks.FindRef(Index).Get())

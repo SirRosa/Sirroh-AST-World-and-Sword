@@ -58,6 +58,7 @@ public:
     UFUNCTION(BlueprintPure, Category="POI Kit") AActor* GetGASPActor() const;
     UFUNCTION(BlueprintPure, Category="POI Kit") AActor* GetASTActor() const;
     void RefreshAppearance();
+    void GetVisualMaskMeshes(TArray<UStaticMeshComponent*>& Out) const;
     bool BeginDropThrough(UCapsuleComponent* Capsule);
     virtual void OnConstruction(const FTransform& Transform) override;
     static bool ShouldPassFromBelow(float CapsuleBottom,float PlatformTop,bool AlreadyIgnoring);

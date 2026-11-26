@@ -11,6 +11,9 @@
 #include "GameFramework/Pawn.h"
 #include "Items/SirrohWorldItem.h"
 #include "HAL/IConsoleManager.h"
+#include "Procedural_World_Generator/PWGv2Generator.h"
+#include "Materials/MaterialInterface.h"
+#include "Engine/StaticMeshActor.h"
 
 static TAutoConsoleVariable<int32> CVarPOIDormancy(TEXT("poi.Dormancy"),1,TEXT("Pause distant POI actor/component ticks and rendering without discarding state."));
 
@@ -175,10 +178,11 @@ APOIKitBlock* APOIShaft::AddBlock(const FPOIKitSettings& Settings,const FTransfo
     UGameplayStatics::FinishSpawningActor(Block,Local*GetActorTransform());
     Block->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
     if (Boundary) Block->Tags.Add(TEXT("POIAutoBoundary"));
-    GeneratedBlocks.Add(Block); HideLayerActor(Block); return Block;
+    GeneratedBlocks.Add(Block); HideLayerActor(Block); ApplyVisualMaskToActor(Block); return Block;
 }
 void APOIShaft::ClearGenerated()
 {
+    RestoreVisualStencils();
     PendingBlocks.Reset();
     SetActorTickInterval(.25f);
     for (ULevelStreamingDynamic* Level:GeneratedLevels) if (Level)
@@ -234,7 +238,7 @@ void APOIShaft::AddSection(const FPOIShaftRow& Section,float Offset)
         }
         Actor->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
         POIImageLighting::ApplyToActor(Actor); // native AST platforms can carry independent PNG mesh slots
-        GeneratedNativeActors.Add(Actor); HideLayerActor(Actor);
+        GeneratedNativeActors.Add(Actor); HideLayerActor(Actor); ApplyVisualMaskToActor(Actor);
     }
 }
 
@@ -420,6 +424,93 @@ void APOIShaft::ApplyLoadedArt()
             if (IsValid(Actor) && !Actor->IsA<APOIKitBlock>() && !Actor->IsA<APawn>() && !Actor->IsA<ASirrohWorldItem>())
                 LitSlots+=POIImageLighting::ApplyToActor(Actor);
         if (LitSlots>0) UE_LOG(LogTemp,Display,TEXT("POI lit native PNG slots=%d level=%s"),LitSlots,*Stream->GetWorldAssetPackageName());
+        for(AActor* Actor:Level->Actors) ApplyVisualMaskToActor(Actor);
         DecoratedLevels.Add(Stream);
     }
+}
+
+void APOIShaft::RestoreVisualStencils()
+{
+    for(const auto& State:VisualStencilStates)
+        if(auto* Mesh=State.Mesh.Get(); Mesh && Mesh->CustomDepthStencilValue==State.AppliedStencil)
+        {
+            Mesh->SetCustomDepthStencilValue(State.OriginalStencil);
+            Mesh->SetRenderCustomDepth(State.bOriginalEnabled);
+        }
+    VisualStencilStates.Reset();
+}
+
+void APOIShaft::ApplyVisualMaskToActor(AActor* Actor)
+{
+    if(!bVisualMaskEnabled || !IsValid(Actor) || Actor->IsA<APawn>() || Actor->IsA<ASirrohWorldItem>() ||
+        (Actor->GetOwner() && Actor->GetOwner()->IsA<APawn>())) return;
+    TArray<UStaticMeshComponent*> Meshes;
+    int32 DefaultStencil=0;
+    if(auto* Kit=Cast<APOIKitBlock>(Actor))
+    {
+        DefaultStencil=Kit->Settings.Kind==EPOIKitKind::Background?APWGv2Generator::VisualRear:APWGv2Generator::VisualGameplay;
+        Kit->GetVisualMaskMeshes(Meshes);
+    }
+    else
+    {
+        if(Actor->ActorHasTag(TEXT("PWGVisualRear"))) DefaultStencil=APWGv2Generator::VisualRear;
+        else if(Actor->ActorHasTag(TEXT("PWGVisualCutaway"))) DefaultStencil=APWGv2Generator::VisualCutaway;
+        else if(Actor->ActorHasTag(TEXT("PWGVisualGameplay"))) DefaultStencil=APWGv2Generator::VisualGameplay;
+        else
+            for(UClass* C=Actor->GetClass();C;C=C->GetSuperClass())
+                if(C->GetPathName().StartsWith(TEXT("/AST_ParkourSystem/Blueprints/Actor/")) ||
+                    C->GetPathName().StartsWith(TEXT("/Game/Levels/LevelPrototyping/LevelBlock_Traversable")))
+                {DefaultStencil=APWGv2Generator::VisualGameplay;break;}
+        Actor->GetComponents<UStaticMeshComponent>(Meshes);
+    }
+    for(auto* Mesh:Meshes)
+    {
+        if(!IsValid(Mesh) || !Mesh->GetStaticMesh() || Mesh->IsSimulatingPhysics()) continue;
+        int32 Stencil=DefaultStencil;
+        if(Mesh->ComponentHasTag(TEXT("PWGVisualRear"))) Stencil=APWGv2Generator::VisualRear;
+        else if(Mesh->ComponentHasTag(TEXT("PWGVisualCutaway"))) Stencil=APWGv2Generator::VisualCutaway;
+        else if(Mesh->ComponentHasTag(TEXT("PWGVisualGameplay"))) Stencil=APWGv2Generator::VisualGameplay;
+        else if(!Stencil && Actor->IsA<AStaticMeshActor>() && Mesh->Mobility==EComponentMobility::Static &&
+            Mesh->GetCollisionObjectType()==ECC_WorldStatic && Mesh->GetCollisionResponseToChannel(ECC_Pawn)==ECR_Block &&
+            Mesh->GetCollisionEnabled()!=ECollisionEnabled::NoCollision) Stencil=APWGv2Generator::VisualGameplay;
+        if(!Stencil) continue;
+        bool bOpaque=true;
+        for(int32 I=0;I<Mesh->GetNumMaterials();++I)
+            if(auto* Mat=Mesh->GetMaterial(I); Mat && Mat->GetBlendMode()!=BLEND_Opaque && Mat->GetBlendMode()!=BLEND_Masked)
+                { bOpaque=false;break; }
+        if(!bOpaque) continue;
+        if(VisualStencilStates.ContainsByPredicate([Mesh](const FVisualStencilState& State){return State.Mesh.Get()==Mesh;})) continue;
+        if(Mesh->bRenderCustomDepth) continue; // preserve pre-existing outline/interaction stencil
+        VisualStencilStates.Add({Mesh,Mesh->CustomDepthStencilValue,Mesh->bRenderCustomDepth,Stencil});
+        Mesh->SetCustomDepthStencilValue(Stencil);
+        Mesh->SetRenderCustomDepth(true);
+    }
+}
+
+void APOIShaft::SetVisualMaskEnabled(bool bEnabled)
+{
+    if(bVisualMaskEnabled==bEnabled) return;
+    bVisualMaskEnabled=bEnabled;
+    if(!bEnabled) {RestoreVisualStencils();return;}
+    for(APOIKitBlock* Block:GeneratedBlocks) ApplyVisualMaskToActor(Block);
+    for(AActor* Actor:GeneratedNativeActors) ApplyVisualMaskToActor(Actor);
+    for(ULevelStreamingDynamic* Stream:GeneratedLevels)
+        if(Stream && Stream->GetLoadedLevel())
+            for(AActor* Actor:Stream->GetLoadedLevel()->Actors) ApplyVisualMaskToActor(Actor);
+}
+
+void APOIShaft::LogVisualMaskCoverage() const
+{
+    if(!bVisualMaskEnabled || IsHidden() || bLayerRenderHidden) return;
+    int32 Rear=0,Gameplay=0,Cutaway=0,Hidden=0;
+    for(const auto& State:VisualStencilStates)
+        if(auto* Mesh=State.Mesh.Get())
+        {
+            if(!Mesh->IsVisible() || Mesh->GetOwner()->IsHidden()) {++Hidden;continue;}
+            if(State.AppliedStencil==APWGv2Generator::VisualRear) ++Rear;
+            else if(State.AppliedStencil==APWGv2Generator::VisualGameplay) ++Gameplay;
+            else if(State.AppliedStencil==APWGv2Generator::VisualCutaway) ++Cutaway;
+        }
+    if(Rear+Gameplay+Cutaway>0)
+        UE_LOG(LogTemp,Display,TEXT("VF_POI_MASK %s rear=%d gameplay=%d cutaway=%d hidden=%d projected=%d levels=%d"),*GetName(),Rear,Gameplay,Cutaway,Hidden,bProjectBackground,GeneratedLevels.Num());
 }

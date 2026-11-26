@@ -347,7 +347,19 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                     const float Ambient=0.68f+0.22f*FMath::Cos(PI*(T0+T1)*0.5f);
                     const FLinearColor Shade(Ambient,Ambient,Ambient);
                     if (FrontSide) Shell.Quad(D,C,B,A,Shade);
-                    else Shell.Quad(A,B,C,D,Shade);
+                    else
+                    {
+                        Shell.Quad(A,B,C,D,Shade);
+                        if (WallPOI!=INDEX_NONE)
+                        {
+                            // Existing natural wall behind masked PNG holes. No new texture or collision.
+                            const FVector Offset(0,2.f,0);
+                            Backdrop.Quad(A+Offset,B+Offset,C+Offset,D+Offset,Shade);
+                            const FVector BackPoints[4]={A,B,C,D};
+                            for (int32 U=0;U<4;++U)
+                                Backdrop.UV[Backdrop.UV.Num()-4+U]=FVector2D(BackPoints[U].X/100,-BackPoints[U].Z/100);
+                        }
+                    }
                     const int32 UVStart=Shell.UV.Num()-4;
                     const FVector Points[4]={FrontSide?D:A,FrontSide?C:B,FrontSide?B:C,FrontSide?A:D};
                     for (int32 U=0;U<4;++U)

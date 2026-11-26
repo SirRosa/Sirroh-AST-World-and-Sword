@@ -74,6 +74,8 @@ public:
     // Independent of distance dormancy: visual suppression must never pause simulation.
     void SetLayerRenderHidden(bool bHideLayer);
     bool IsLayerRenderHidden() const { return bLayerRenderHidden; }
+    void SetVisualMaskEnabled(bool bEnabled);
+    void LogVisualMaskCoverage() const;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft") FPOIShaftRow Recipe;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft",meta=(ClampMin="150",ClampMax="30000")) float Height=900;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft") float BottomExitClearance=300;
@@ -109,6 +111,11 @@ private:
     TSet<TWeakObjectPtr<AActor>> PausedSet;
     bool bDormant=false;
     bool bLayerRenderHidden=false;
+    bool bVisualMaskEnabled=false;
+    struct FVisualStencilState { TWeakObjectPtr<UPrimitiveComponent> Mesh; int32 OriginalStencil=0; bool bOriginalEnabled=false; int32 AppliedStencil=0; };
+    TArray<FVisualStencilState> VisualStencilStates;
+    void ApplyVisualMaskToActor(AActor* Actor);
+    void RestoreVisualStencils();
     TSet<TWeakObjectPtr<AActor>> LayerHiddenActors;
     void HideLayerActor(AActor* Actor);
     void RefreshLayerRenderVisibility();

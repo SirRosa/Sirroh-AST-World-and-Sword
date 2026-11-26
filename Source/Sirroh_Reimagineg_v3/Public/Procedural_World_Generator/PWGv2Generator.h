@@ -41,7 +41,11 @@ public:
     // Reserved stencil roles for this pass, independent of physical lane.
     static constexpr int32 VisualRear=201;
     static constexpr int32 VisualCutaway=202;
+    static constexpr int32 VisualGameplay=203;
     static int32 VisualRoleForSection(int32 Section);
+    bool IsVisualMaskPassEnabled() const { return bVisualMaskPassEnabled && bUndergroundView; }
+    bool HasProjectedPOIBackground(int32 POIIndex) const;
+    void DebugVisualCoverage(const FTransform& Camera,float Width,float Height) const;
     bool IsDebugSession() const { return DebugOriginalWorld != nullptr; }
     UPWGv2WorldSave* GetDebugEditWorld() const { return DebugWorkingWorld; }
     bool DebugRebuild(bool Restore, FString& Error, bool Replan=false);
