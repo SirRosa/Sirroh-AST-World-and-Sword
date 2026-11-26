@@ -8,6 +8,7 @@
 #include "POI/POICorridorTools.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Items/SirrohWorldItem.h"
 #include "HAL/IConsoleManager.h"
 
 static TAutoConsoleVariable<int32> CVarPOIDormancy(TEXT("poi.Dormancy"),1,TEXT("Pause distant POI actor/component ticks and rendering without discarding state."));
@@ -87,6 +88,38 @@ void APOIShaft::ProcessPendingBuild()
         Status=FString::Printf(TEXT("Built %d blocks."),GeneratedBlocks.Num());
     }
 }
+void APOIShaft::HideLayerActor(AActor* Actor)
+{
+    if (!bLayerRenderHidden || !IsValid(Actor) || !Actor->GetRootComponent() || Actor->IsA<APawn>() || Actor->IsA<ASirrohWorldItem>()) return;
+    if ((Actor->GetOwner() && Actor->GetOwner()->IsA<APawn>()) || (Actor->GetAttachParentActor() && Actor->GetAttachParentActor()->IsA<APawn>())) return;
+    const TWeakObjectPtr<AActor> Key(Actor);
+    if (LayerHiddenActors.Contains(Key)) return;
+    // A dormant actor may already be hidden; remember its original state, not the dormancy mask.
+    const FPausedActor* Paused=PausedSet.Contains(Key)?PausedActors.FindByPredicate([&](const FPausedActor& State){return State.Actor==Key;}):nullptr;
+    if (Paused?Paused->Hidden:Actor->IsHidden()) return;
+    LayerHiddenActors.Add(Key);
+    Actor->SetActorHiddenInGame(true);
+}
+void APOIShaft::RefreshLayerRenderVisibility()
+{
+    if (!bLayerRenderHidden) return;
+    for (APOIKitBlock* Block:GeneratedBlocks) HideLayerActor(Block);
+    for (AActor* Actor:GeneratedNativeActors) if (IsValid(Actor) && Actor->GetOwner()==this) HideLayerActor(Actor);
+    for (ULevelStreamingDynamic* Stream:GeneratedLevels) if (Stream && Stream->GetLoadedLevel())
+        for (AActor* Actor:Stream->GetLoadedLevel()->Actors) HideLayerActor(Actor);
+}
+void APOIShaft::SetLayerRenderHidden(bool bHidden)
+{
+    if (bLayerRenderHidden==bHidden) return;
+    bLayerRenderHidden=bHidden;
+    if (bHidden) RefreshLayerRenderVisibility();
+    else
+    {
+        for (const auto& Key:LayerHiddenActors)
+            if (auto* Actor=Key.Get(); Actor && !PausedSet.Contains(Key)) Actor->SetActorHiddenInGame(false);
+        LayerHiddenActors.Reset();
+    }
+}
 void APOIShaft::UpdateDormancy()
 {
     APawn* Player=UGameplayStatics::GetPlayerPawn(this,0);
@@ -98,7 +131,7 @@ void APOIShaft::UpdateDormancy()
     {
         for (const auto& State:PausedActors) if (auto* A=State.Actor.Get())
         {
-            A->SetActorHiddenInGame(State.Hidden); A->SetActorTickEnabled(State.Tick);
+            A->SetActorHiddenInGame(State.Hidden || LayerHiddenActors.Contains(State.Actor)); A->SetActorTickEnabled(State.Tick);
             for (const auto& C:State.TickingComponents) if (C.IsValid()) C->SetComponentTickEnabled(true);
         }
         PausedActors.Reset(); PausedSet.Reset(); bDormant=false;
@@ -117,7 +150,7 @@ void APOIShaft::UpdateDormancy()
             if (A->GetAttachParentActor() && A->GetAttachParentActor()->IsA<APawn>()) continue;
             if (A->GetOwner() && A->GetOwner()->IsA<APawn>()) continue;
             if (PausedSet.Contains(A)) continue;
-            FPausedActor State; State.Actor=A; State.Tick=A->IsActorTickEnabled(); State.Hidden=A->IsHidden();
+            FPausedActor State; State.Actor=A; State.Tick=A->IsActorTickEnabled(); State.Hidden=A->IsHidden() && !LayerHiddenActors.Contains(TWeakObjectPtr<AActor>(A));
             for (UActorComponent* C:A->GetComponents()) if (C && C->IsComponentTickEnabled()) { State.TickingComponents.Add(C); C->SetComponentTickEnabled(false); }
             A->SetActorTickEnabled(false); A->SetActorHiddenInGame(true); PausedActors.Add(MoveTemp(State)); PausedSet.Add(A);
         }
@@ -141,7 +174,7 @@ APOIKitBlock* APOIShaft::AddBlock(const FPOIKitSettings& Settings,const FTransfo
     UGameplayStatics::FinishSpawningActor(Block,Local*GetActorTransform());
     Block->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
     if (Boundary) Block->Tags.Add(TEXT("POIAutoBoundary"));
-    GeneratedBlocks.Add(Block); return Block;
+    GeneratedBlocks.Add(Block); HideLayerActor(Block); return Block;
 }
 void APOIShaft::ClearGenerated()
 {
@@ -154,6 +187,7 @@ void APOIShaft::ClearGenerated()
     }
     GeneratedLevels.Reset(); DecoratedLevels.Reset(); DormantActorCount=-1;
     PausedActors.Reset(); PausedSet.Reset(); bDormant=false;
+    LayerHiddenActors.Reset();
     for (APOIKitBlock* Block:GeneratedBlocks) if (IsValid(Block) && Block->GetOwner()==this) Block->Destroy();
     GeneratedBlocks.Reset();
     for (AActor* Actor:GeneratedNativeActors) if (IsValid(Actor) && Actor->GetOwner()==this) Actor->Destroy();
@@ -198,7 +232,7 @@ void APOIShaft::AddSection(const FPOIShaftRow& Section,float Offset)
             Actor->RerunConstructionScripts();
         }
         Actor->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
-        GeneratedNativeActors.Add(Actor);
+        GeneratedNativeActors.Add(Actor); HideLayerActor(Actor);
     }
 }
 
@@ -357,6 +391,7 @@ void APOIShaft::EndPlay(const EEndPlayReason::Type Reason)
 
 void APOIShaft::ApplyLoadedArt()
 {
+    RefreshLayerRenderVisibility();
     const auto* Theme=ShaftArt(Recipe);
     if (!Theme) return;
     for (int32 I=0;I<GeneratedLevels.Num();++I)

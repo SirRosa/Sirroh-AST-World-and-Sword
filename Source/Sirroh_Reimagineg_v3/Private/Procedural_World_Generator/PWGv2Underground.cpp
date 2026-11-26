@@ -109,7 +109,12 @@ float APWGv2Generator::GetCameraGroundHeight(const FVector& Location) const
 }
 void APWGv2Generator::UpdateCutaway(const FVector& Player)
 {
-    bUndergroundView=LayerAt(Player)>0;
+    const bool bNewUndergroundView=LayerAt(Player)>0;
+    if (bUndergroundView!=bNewUndergroundView)
+    {
+        bUndergroundView=bNewUndergroundView;
+        for (const auto& Pair:Chunks) ApplyChunkLayerVisibility(Pair.Key);
+    }
     if (ForegroundMaterial)
     {
         ForegroundMaterial->SetScalarParameterValue(TEXT("Opacity"),bUndergroundView?FMath::Clamp(Settings.UndergroundForegroundOpacity,0.f,1.f):1);
@@ -122,9 +127,6 @@ void APWGv2Generator::UpdateCutaway(const FVector& Player)
         Pair.Value->SetScalarParameterValue(TEXT("CutawayRadius"),FMath::Max(1800.f,Settings.CutawayRadius));
         Pair.Value->SetVectorParameterValue(TEXT("CutawayCenter"),FLinearColor(Player.X,Player.Y,Player.Z));
     }
-    for (auto& Pair:Chunks)
-        if (Pair.Value->IsMeshSectionVisible(1) == bUndergroundView)
-            Pair.Value->SetMeshSectionVisible(1,!bUndergroundView);
     if (EnvironmentV2)
     {
         const auto R=EcologyAt(GetActorTransform().InverseTransformPosition(Player).X);
@@ -310,7 +312,9 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         // A hole reveals the destination's opaque wall, never the sky behind the island.
         const float WallLeft=FMath::Max(Start,Portal.X-Portal.Width/2),WallRight=FMath::Min(End,Portal.X+Portal.Width/2);
         if (WallLeft >= WallRight) continue;
-        auto& Shaft=ShaftWalls.FindOrAdd(Portal.LowerLayer);
+        // Old direct-to-caves entrances (0->2) must not share the deeper 1->2 section.
+        const int32 ShaftKey=Portal.UpperLayer==0 && Portal.LowerLayer==2?-2:Portal.LowerLayer;
+        auto& Shaft=ShaftWalls.FindOrAdd(ShaftKey);
         const float UpperLeft=LayerFloor(Portal.UpperLayer,WallLeft),UpperRight=LayerFloor(Portal.UpperLayer,WallRight);
         const float ShaftTop=FMath::Max3(Upper,UpperLeft,UpperRight);
         TArray<float> Bands={Lower,ShaftTop};
@@ -326,7 +330,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             const float Back0=100+35*FMath::Sin(Z/240+Portal.X/600),Back1=100+35*FMath::Sin(Top/240+Portal.X/600);
             Shaft.Quad(FVector(WallLeft,Back0,FMath::Min(Z,UpperLeft)),FVector(WallRight,Back0,FMath::Min(Z,UpperRight)),
                 FVector(WallRight,Back1,FMath::Min(Top,UpperRight)),FVector(WallLeft,Back1,FMath::Min(Top,UpperLeft)),FLinearColor::White);
-            auto& Front=ShaftFronts.FindOrAdd(Portal.LowerLayer);
+            auto& Front=ShaftFronts.FindOrAdd(ShaftKey);
             Front.Quad(FVector(WallLeft,-75,FMath::Min(Z,UpperLeft)),FVector(WallRight,-75,FMath::Min(Z,UpperRight)),
                 FVector(WallRight,-75,FMath::Min(Top,UpperRight)),FVector(WallLeft,-75,FMath::Min(Top,UpperLeft)),FLinearColor::White);
             bool InRoom=false;
@@ -364,6 +368,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
                 auto* KitShaft=GetWorld()->SpawnActor<APOIShaft>(APOIShaft::StaticClass(),GetActorTransform().TransformPosition(FVector(Portal.X,0,Lower)),FRotator::ZeroRotator,Params);
                 if (KitShaft)
                 {
+                    if (Portal.UpperLayer>0) KitShaft->Tags.Add(TEXT("PWGUndergroundPOI"));
                     KitShaft->bIncrementalBuild=AsyncCooking;
                     KitShaft->bBuildBoundaryWalls=false; // PWG owns the lining and the exits at each layer.
                     KitShaft->Recipe=Portal.ShaftRecipe; KitShaft->Height=Upper-Lower;
@@ -390,12 +395,17 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     }
     int32 POISection=25;
     for (auto& Pair:POIWallBuffers) { Pair.Value.Submit(Mesh,POISection); Mesh->SetMaterial(POISection++,POIWallMaterials[Pair.Key]); }
-    for (auto& Entry:ShaftWalls) { Entry.Value.Submit(Mesh,12+Entry.Key); Mesh->SetMaterial(12+Entry.Key,AtlasMaterial(WorldData->Layers[Entry.Key-1].Atlas,FLinearColor::White,true)); }
+    for (auto& Entry:ShaftWalls)
+    {
+        const int32 Layer=FMath::Abs(Entry.Key), Section=Entry.Key<0?9:12+Layer;
+        Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,AtlasMaterial(WorldData->Layers[Layer-1].Atlas,FLinearColor::White,true));
+    }
     for (auto& Entry:ShaftFronts)
     {
-        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Entry.Key-1].WallTexture,TEXT("Shaft front"),false):nullptr)
+        const int32 Layer=FMath::Abs(Entry.Key), Section=Entry.Key<0?10:20+Layer;
+        if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Shaft front"),false):nullptr)
             for (auto& UV:Entry.Value.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);
-        Entry.Value.Submit(Mesh,20+Entry.Key); Mesh->SetMaterial(20+Entry.Key,WallMaterial(Entry.Key,true,true));
+        Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,WallMaterial(Layer,true,true));
     }
     Mesh->SetCollisionConvexMeshes(Hulls);
     Mesh->SetCanEverAffectNavigation(Hulls.Num()>0);
@@ -435,6 +445,7 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
     if (RockMesh) for (int32 Layer=1;Layer<=4;++Layer)
     {
         auto* Rocks=NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+        Rocks->ComponentTags.Add(TEXT("PWGUndergroundVisual"));
         Rocks->SetupAttachment(GetRootComponent()); Rocks->SetStaticMesh(RockMesh); Rocks->SetMaterial(0,AtlasMaterial(WorldData->Layers[Layer-1].Atlas,FLinearColor::White,true));
         Rocks->SetCollisionEnabled(ECollisionEnabled::NoCollision); Rocks->SetCastShadow(false); Rocks->RegisterComponent();
         TArray<FTransform> Instances; FRandomStream Random(HashCombineFast(WorldData->Seed,Index)^0xD00D);

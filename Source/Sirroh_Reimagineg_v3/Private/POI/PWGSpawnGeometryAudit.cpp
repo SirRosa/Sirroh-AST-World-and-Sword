@@ -11,6 +11,8 @@
 #include "Misc/Paths.h"
 #include "POI/POIShaft.h"
 #include "ProceduralMeshComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Procedural_World_Generator/PWGProceduralTree.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPWGSpawnGeometryAudit,"Sirroh.PWG.SpawnGeometryAudit",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
@@ -113,6 +115,60 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     }
                 }
             }
+            // Exercise both domain changes and the no-frustum (debug/perspective) path.
+            auto CheckVisibility=[&](bool bUnderground)
+            {
+                G->UpdateGameplayView(FTransform::Identity,0.f,16.f/9.f);
+                int32 Surface=0, Cave=0, Props=0;
+                for (const auto& Pair:G->Chunks) if (const auto* Mesh=Pair.Value.Get())
+                {
+                    ++Surface;
+                    TestTrue(TEXT("Surface component layer visibility"),Mesh->IsVisible()!=bUnderground);
+                }
+                for (const auto& Pair:G->DecorationChunks)
+                {
+                    const auto& Batch=Pair.Value;
+                    for (UHierarchicalInstancedStaticMeshComponent* C:Batch.Components) if (IsValid(C))
+                    {
+                        if (C->ComponentHasTag(TEXT("PWGSurfaceVisual"))) { ++Props; TestTrue(TEXT("Surface vegetation/rocks layer visibility"),C->IsVisible()!=bUnderground); }
+                        if (C->ComponentHasTag(TEXT("PWGUndergroundVisual"))) TestTrue(TEXT("Cave rocks layer visibility"),C->IsVisible()==bUnderground);
+                    }
+                    for (const auto& Tree:Batch.Trees) if (Tree.IsValid()) TestTrue(TEXT("Tree layer visibility"),Tree->GetRootComponent()->IsVisible()!=bUnderground);
+                    for (AActor* Actor:Batch.Actors) if (IsValid(Actor))
+                    {
+                        if (auto* POI=Cast<APOIShaft>(Actor))
+                        {
+                            if (POI->ActorHasTag(TEXT("PWGSurfacePOI"))) TestTrue(TEXT("Surface POI render mask"),POI->IsLayerRenderHidden()==bUnderground);
+                            if (POI->ActorHasTag(TEXT("PWGUndergroundPOI"))) TestTrue(TEXT("Underground POI render mask"),POI->IsLayerRenderHidden()!=bUnderground);
+                        }
+                    }
+                    if (auto* Mesh=G->UndergroundChunks.FindRef(Pair.Key).Get())
+                        for (int32 S=0;S<Batch.UndergroundSectionBounds.Num();++S) if (Batch.UndergroundSectionBounds[S].IsValid)
+                        {
+                            ++Cave;
+                            TestTrue(TEXT("Cave section layer visibility"),Mesh->IsMeshSectionVisible(S)==(bUnderground || G->IsSurfaceEntranceSection(S)));
+                        }
+                }
+                TestTrue(TEXT("Visibility audit has surface geometry"),Surface>0);
+                TestTrue(TEXT("Visibility audit has cave geometry"),Cave>0);
+                AddInfo(FString::Printf(TEXT("LAYER_VISIBILITY underground=%d surface=%d cave_sections=%d props=%d"),bUnderground,Surface,Cave,Props));
+            };
+            TMap<UProceduralMeshComponent*,ECollisionEnabled::Type> CollisionBefore;
+            for (auto* Mesh:Meshes) CollisionBefore.Add(Mesh,Mesh->GetCollisionEnabled());
+            G->UpdateCutaway(Spawn+FVector(0,0,100)); CheckVisibility(false);
+            G->UpdateCutaway(Spawn-FVector(0,0,5000)); CheckVisibility(true);
+            for (const auto& Pair:CollisionBefore) TestTrue(TEXT("Visibility never changes collision"),Pair.Key->GetCollisionEnabled()==Pair.Value);
+            // A newly built chunk inherits the active layer, even before the next camera update.
+            const float Size=G->Settings.ChunkLengthMetres*100;
+            const int32 Fresh=G->Settings.LoadRadius+2;
+            if (Fresh*Size<D->MaxX && !G->Chunks.Contains(Fresh))
+            {
+                G->BuildChunk(Fresh);
+                if (auto* Surface=G->Chunks.FindRef(Fresh).Get()) TestFalse(TEXT("Newly streamed surface hidden underground"),Surface->IsVisible());
+                else AddError(TEXT("Fresh chunk did not build"));
+                CheckVisibility(true);
+            }
+            G->UpdateCutaway(Spawn+FVector(0,0,100)); CheckVisibility(false);
         }
         GEngine->DestroyWorldContext(World); World->DestroyWorld(false);
         UGameplayStatics::DeleteGameInSlot(Slot,0);

@@ -71,6 +71,9 @@ public:
     bool bIncrementalBuild=false;
     bool HasPendingBuild() const { return !PendingBlocks.IsEmpty(); }
     void ProcessPendingBuild();
+    // Independent of distance dormancy: visual suppression must never pause simulation.
+    void SetLayerRenderHidden(bool bHidden);
+    bool IsLayerRenderHidden() const { return bLayerRenderHidden; }
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft") FPOIShaftRow Recipe;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft",meta=(ClampMin="150",ClampMax="30000")) float Height=900;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shaft") float BottomExitClearance=300;
@@ -105,6 +108,10 @@ private:
     TArray<FPausedActor> PausedActors;
     TSet<TWeakObjectPtr<AActor>> PausedSet;
     bool bDormant=false;
+    bool bLayerRenderHidden=false;
+    TSet<TWeakObjectPtr<AActor>> LayerHiddenActors;
+    void HideLayerActor(AActor* Actor);
+    void RefreshLayerRenderVisibility();
     int32 DormantActorCount=-1;
     void UpdateDormancy();
     UFUNCTION() void ApplyLoadedArt();

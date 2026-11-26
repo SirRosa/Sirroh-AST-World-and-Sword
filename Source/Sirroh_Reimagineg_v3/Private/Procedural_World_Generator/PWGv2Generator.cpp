@@ -48,7 +48,7 @@ bool APWGv2Generator::GenerateWorld(FName)
     }
     UndergroundChunks.Reset(); DecorationChunks.Reset(); AtlasMaterials.Reset(); bVisitReady=false;
     Chunks.Reset(); GrassChunks.Reset(); WorldData=nullptr;
-    bLoadedFromSave=false; bWorldSaved=false;
+    bLoadedFromSave=false; bWorldSaved=false; bUndergroundView=false;
     FParse::Value(FCommandLine::Get(),TEXT("PWGWorld="),WorldName);
     FParse::Value(FCommandLine::Get(),TEXT("PWGSeed="),SeedOverride);
     bool bValidName=!WorldName.IsEmpty() && WorldName.Len()<=64;
@@ -348,8 +348,8 @@ void APWGv2Generator::Tick(float DeltaSeconds)
     UpdateTime=0;
     if (const APawn* Pawn=UGameplayStatics::GetPlayerPawn(this,0))
     {
-        StreamAt(GetWorld()->GetTimeSeconds()<DebugTeleportPinUntil?DebugTeleportPinX:GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation()).X,false);
         UpdateCutaway(Pawn->GetActorLocation());
+        StreamAt(GetWorld()->GetTimeSeconds()<DebugTeleportPinUntil?DebugTeleportPinX:GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation()).X,false);
         // The camera-facing ray curtain hid unrelated lanes and decoration.
         // Do not spawn it. Region/portal visibility is a separate rendering pass.
         SaveTime+=0.2f;
@@ -519,6 +519,7 @@ void APWGv2Generator::BuildChunk(int32 Index,bool AsyncCooking)
     if (Settings.bEnableUnderground) BuildUnderground(Index,Start,End,AsyncCooking,Samples);
     const double UndergroundDone=FPlatformTime::Seconds();
     BuildAuthoredPOIs(Index,Start,End);
+    ApplyChunkLayerVisibility(Index);
     const double POIDone=FPlatformTime::Seconds();
     if((POIDone-ChunkStart)*1000>16)
         UE_LOG(LogPWGv2,Display,TEXT("PWG chunk phases %d: terrain=%.1f vegetation=%.1f underground=%.1f POI=%.1f ms"),Index,

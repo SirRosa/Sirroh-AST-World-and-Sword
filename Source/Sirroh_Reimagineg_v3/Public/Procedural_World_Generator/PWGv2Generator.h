@@ -94,6 +94,7 @@ private:
     friend class FPWGShaftTerrainTest;
     friend class FPWGStreamingCostTest;
     friend class FPWGRoomChainTest;
+    friend class FPWGSpawnGeometryAudit;
     UPROPERTY(Transient) TObjectPtr<UPWGv2WorldSave> DebugOriginalWorld;
     UPROPERTY(Transient) TObjectPtr<UPWGv2WorldSave> DebugWorkingWorld;
     UPROPERTY(Transient) TArray<TObjectPtr<UDataTable>> DebugOriginalTables;
@@ -142,6 +143,9 @@ private:
     float LayerCeiling(int32 Layer, float X) const;
     bool IsOpening(int32 Layer, float X, float Y) const;
     void UpdateCutaway(const FVector& Player);
+    void ApplyChunkLayerVisibility(int32 Index);
+    // Surface shaft lining is independent of the ordinary cave shell.
+    static bool IsSurfaceEntranceSection(int32 Section) { return Section==9 || Section==10 || Section==13 || Section==21; }
     void CaptureVisit();
     FString SlotName() const;
     void MakeProfile();

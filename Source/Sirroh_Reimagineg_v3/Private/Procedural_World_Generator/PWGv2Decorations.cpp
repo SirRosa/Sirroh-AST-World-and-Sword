@@ -8,6 +8,7 @@
 #include "Placeholder/PlaceholderBerry.h"
 #include "Placeholder/PlaceholderBerryWorld.h"
 #include "Kismet/GameplayStatics.h"
+#include "POI/POIShaft.h"
 
 namespace
 {
@@ -251,7 +252,7 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
                     const float LaneY=-Settings.LaneSpacing;
                     const FTransform Spawn(GetActorTransform().TransformPosition(FVector(X,LaneY,Height(X,LaneY)+65)));
                     auto* Fruit=GetWorld()->SpawnActorDeferred<APlaceholderBerry>(APlaceholderBerry::StaticClass(),Spawn,this,nullptr,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-                    if (Fruit) { Fruit->PersistentId=Id; Fruit->LaneY=GetActorLocation().Y+LaneY; UGameplayStatics::FinishSpawningActor(Fruit,Spawn); Saved.Actors.Add(Fruit); }
+                    if (Fruit) { Fruit->PersistentId=Id; Fruit->LaneY=GetActorLocation().Y+LaneY; Fruit->Tags.Add(TEXT("PWGSurfaceFruit")); UGameplayStatics::FinishSpawningActor(Fruit,Spawn); Saved.Actors.Add(Fruit); }
                 }
             }
         }
@@ -260,6 +261,7 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
     {
         auto& Batch=Pair.Value;
         auto* H=NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+        H->ComponentTags.Add(TEXT("PWGSurfaceVisual"));
         H->SetupAttachment(GetRootComponent()); H->SetStaticMesh(Batch.Mesh); H->SetMaterial(0,Batch.Material);
         H->SetCollisionEnabled(ECollisionEnabled::NoCollision); H->SetCastShadow(false); H->SetCanEverAffectNavigation(false);
         const int32 Cull=Batch.Grass?FMath::Max(1000,Settings.GrassCullDistance):30000;
@@ -273,6 +275,39 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
             for (const FTransform& Instance : Batch.Instances)
                 Saved.GrassBounds += CardBounds.TransformBy(Instance * H->GetComponentTransform());
         }
+    }
+}
+
+void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
+{
+    // Render state only: keep hulls, navigation, actors, simulation and streaming intact.
+    if (auto* Surface=Chunks.FindRef(Index).Get()) Surface->SetVisibility(!bUndergroundView);
+    if (auto* Grass=GrassChunks.FindRef(Index).Get()) Grass->SetVisibility(!bUndergroundView);
+    if (auto* Batch=DecorationChunks.Find(Index))
+    {
+        for (UHierarchicalInstancedStaticMeshComponent* Component:Batch->Components)
+        {
+            if (!IsValid(Component)) continue;
+            if (Component->ComponentHasTag(TEXT("PWGSurfaceVisual"))) Component->SetVisibility(!bUndergroundView);
+            else if (Component->ComponentHasTag(TEXT("PWGUndergroundVisual"))) Component->SetVisibility(bUndergroundView);
+        }
+        Batch->bGrassVisible=!bUndergroundView;
+        for (const auto& WeakTree:Batch->Trees)
+            if (auto* Tree=WeakTree.Get()) Tree->GetRootComponent()->SetVisibility(!bUndergroundView);
+        for (AActor* Actor:Batch->Actors)
+        {
+            if (!IsValid(Actor) || Actor->GetOwner()!=this) continue;
+            if (Actor->ActorHasTag(TEXT("PWGSurfaceFruit"))) Actor->SetActorHiddenInGame(bUndergroundView);
+            if (auto* POI=Cast<APOIShaft>(Actor))
+            {
+                if (POI->ActorHasTag(TEXT("PWGSurfacePOI"))) POI->SetLayerRenderHidden(bUndergroundView);
+                else if (POI->ActorHasTag(TEXT("PWGUndergroundPOI"))) POI->SetLayerRenderHidden(!bUndergroundView);
+            }
+        }
+        if (auto* Mesh=UndergroundChunks.FindRef(Index).Get())
+            for (int32 Section=0;Section<Batch->UndergroundSectionBounds.Num();++Section)
+                if (Batch->UndergroundSectionBounds[Section].IsValid)
+                    Mesh->SetMeshSectionVisible(Section,bUndergroundView || IsSurfaceEntranceSection(Section));
     }
 }
 
@@ -310,7 +345,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
     for (auto& Pair : DecorationChunks)
     {
         auto& Batch = Pair.Value;
-        const bool bShowGrass = Batch.GrassBounds.IsValid && (ViewWidth <= 0.f || !bUndergroundView) && InView(Batch.GrassBounds);
+        const bool bShowGrass = Batch.GrassBounds.IsValid && !bUndergroundView && InView(Batch.GrassBounds);
         if (Batch.bGrassVisible != bShowGrass)
         {
             Batch.bGrassVisible = bShowGrass;
@@ -321,7 +356,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
             if (auto* Tree = WeakTree.Get())
             {
                 auto* Root = Tree->GetRootComponent();
-                const bool bVisible = (ViewWidth <= 0.f || !bUndergroundView) && InView(Root->Bounds.GetBox());
+                const bool bVisible = !bUndergroundView && InView(Root->Bounds.GetBox());
                 if (Root->IsVisible() != bVisible) Root->SetVisibility(bVisible);
             }
         }
@@ -331,7 +366,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
             {
                 const FBox& Bounds = Batch.UndergroundSectionBounds[Section];
                 if (!Bounds.IsValid) continue;
-                const bool bVisible = InView(Bounds);
+                const bool bVisible = (bUndergroundView || IsSurfaceEntranceSection(Section)) && InView(Bounds);
                 if (Mesh->IsMeshSectionVisible(Section) != bVisible)
                     Mesh->SetMeshSectionVisible(Section, bVisible);
             }

@@ -162,6 +162,7 @@ void APWGv2Generator::BuildAuthoredPOIs(int32 Index,float Start,float End)
         auto* POI=GetWorld()->SpawnActor<APOIShaft>(APOIShaft::StaticClass(),GetActorTransform().TransformPosition(Local),FRotator::ZeroRotator,Params);
         if (!POI) continue;
         POI->Recipe=WorldData->AuthoredPOIs[I]; POI->Height=POI->Recipe.SectionHeight;
+        POI->Tags.Add(POI->Recipe.UpperLayer==0?TEXT("PWGSurfacePOI"):TEXT("PWGUndergroundPOI"));
         POI->bProjectBackground=POI->Recipe.UpperLayer>0 && !POI->Recipe.ArtTheme.IsNull();
         POI->Seed=HashCombineFast(WorldData->Seed,I+0xA071); POI->bBuildBoundaryWalls=false;
         POI->BuildShaft(); DecorationChunks.FindOrAdd(Index).Actors.Add(POI);

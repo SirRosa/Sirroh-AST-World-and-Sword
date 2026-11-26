@@ -92,6 +92,7 @@ void APlaceholderBerry::Take(AActor* Holder)
     bHeld=true;
     bFlying=false;
     SetOwner(Holder); // Chunk eviction must not destroy a berry in a hand.
+    if (Tags.Remove(TEXT("PWGSurfaceFruit"))>0) SetActorHiddenInGame(false);
     SetHighlighted(false);
     SetActorTickEnabled(false);
     Collision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -111,6 +112,7 @@ void APlaceholderBerry::Throw(const FVector& Origin, const FVector& InitialVeloc
     bHeld=false;
     bFlying=true;
     SetOwner(nullptr);
+    if (Tags.Remove(TEXT("PWGSurfaceFruit"))>0) SetActorHiddenInGame(false);
     SetActorLocation(Origin);
     LaneY=Origin.Y;
     Velocity=InitialVelocity;
