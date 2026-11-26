@@ -172,7 +172,30 @@ bool APWGv2Generator::DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,F
     }
     float Centre=0,PreferredX=0,FocusZ=0;
     int32 Layer=1;
-    if(Scene==1 || Scene==4)
+    if(Scene==7 || Scene==8)
+    {
+        Label=Scene==7?TEXT("Chamber"):TEXT("DeepCave");
+        Layer=Scene==7?2:4;
+        if(!WorldData->Layers.IsValidIndex(Layer-1))return false;
+        const float Room=FMath::Max(600.f,WorldData->Layers[Layer-1].RoomLengthMetres*100.f);
+        TArray<float> Candidates;
+        for(int32 K=-40;K<=40;++K)
+        {
+            const float X=(FMath::FloorToFloat(CurrentX/Room)+K+.5f)*Room;
+            if(X<WorldData->MinX+800 || X>WorldData->MaxX-800 || IsOpening(Layer,X,0))continue;
+            bool bAuthored=false;
+            for(const auto& C:WorldData->RoomChains)if(C.Layer==Layer && X>=C.StartX-800 && X<=C.EndX+800){bAuthored=true;break;}
+            if(!bAuthored)Candidates.Add(X);
+        }
+        Candidates.Sort([&](float A,float B){return LayerCeiling(Layer,A)-LayerFloor(Layer,A)>LayerCeiling(Layer,B)-LayerFloor(Layer,B);});
+        if(Candidates.IsEmpty())return false;
+        Centre=PreferredX=Candidates[0];
+        const float Floor=LayerFloor(Layer,Centre),Clear=LayerCeiling(Layer,Centre)-Floor;
+        if(Clear<=240.f){UE_LOG(LogTemp,Warning,TEXT("VF_CAVE_NO_LARGE_OPENING layer=%d clear=%.1f"),Layer,Clear);return false;}
+        FocusZ=Floor+Clear*.48f;
+        UE_LOG(LogTemp,Display,TEXT("VF_CAVE_QA_OPENING layer=%d clear_cm=%.1f x=%.0f"),Layer,Clear,Centre);
+    }
+    else if(Scene==1 || Scene==4)
     {
         Label=Scene==1?TEXT("Shaft"):TEXT("Shaft2");
         const FPWGv2Portal* Best=nullptr; float Distance=MAX_flt;

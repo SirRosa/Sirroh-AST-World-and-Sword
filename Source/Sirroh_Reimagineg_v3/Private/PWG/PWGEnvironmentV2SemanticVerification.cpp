@@ -52,7 +52,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     {
         VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
         VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
-        if(bCaveQA) VisualProfile.bCaveReference=true;
+        if(bCaveQA){VisualProfile.bCaveReference=true; if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
         VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
         VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
         VisualProfile.bCompareStage1=!bDepthQA || bStage1;
@@ -69,8 +69,14 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         bVisualProbeDisableMaskPass=false;
         PC->ConsoleCommand(TEXT("t.MaxFPS 60"));
         G->SetBackgroundAuditIsolation(0);
-        ++VisualProbeScene;
-        if(bCaveQA || VisualProbeScene>(bIsolation||bEnclosed?3:6))
+        if(bCaveQA)
+        {
+            G->ResetCaveReference();
+            // Existing tunnel, shaft, POI, larger natural chamber, deeper cave.
+            VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?7:VisualProbeScene==7?8:9;
+        }
+        else ++VisualProbeScene;
+        if((bCaveQA && VisualProbeScene>8) || (!bCaveQA && VisualProbeScene>(bIsolation||bEnclosed?3:6)))
         {
             UE_LOG(LogTemp,Display,TEXT("VF_RENDER_COMPLETE all requested scene sequences"));
             VisualProbeStep=-1; FPlatformMisc::RequestExit(false); return;
@@ -135,7 +141,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?TEXT("ChatGPT/IndependentCaveReference_20261126/RenderOrganic"):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bCaveQA?TEXT("ChatGPT/StratifiedCave_20261126/Render"):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -219,7 +225,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         case 10: if(!Capture(TEXT("Warm")))return;break;
         case 11:
         {
-            if(VisualProbeScene==2)
+            if(!bCaveQA && VisualProbeScene==2)
             {
                 SetPreset(1);
                 PC->ConsoleCommand(TEXT("t.MaxFPS 0"));
@@ -229,7 +235,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             auto* TorchClass=LoadClass<ASirrohTorch>(nullptr,TEXT("/Game/POIKit/CarryProps/BP_AST_Torch.BP_AST_Torch_C"));
             if(!TorchClass){Fail(TEXT("torch class unavailable"));return;}
             FActorSpawnParameters Params;Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-            const FVector Loc=Pawn->GetActorLocation()+FVector(130,-30,-20);
+            const FVector Loc=Pawn->GetActorLocation()+(bCaveQA?FVector(-350,180,40):FVector(130,-30,-20));
             auto* Torch=GetWorld()->SpawnActor<ASirrohTorch>(TorchClass,Loc,FRotator::ZeroRotator,Params);
             if(!Torch || !Torch->Fire || !Torch->TorchMesh){Fail(TEXT("torch unavailable"));return;}
             Torch->TorchMesh->SetSimulatePhysics(false);Torch->TorchMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -294,7 +300,18 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         case 46: if(!Capture(TEXT("ClosureOnly")))return;break;
         case 47: SetPreset(0);break;
         case 48: if(!Capture(TEXT("Dark")))return;break;
-        case 49: SetPreset(1);PC->ConsoleCommand(TEXT("t.MaxFPS 0"));Advance(20);return;
+        case 49: SetPreset(1);VisualProfile.Strength=0.f;RefreshVisualProfile();break;
+        case 50: if(!Capture(TEXT("RawLit")))return;break;
+        case 51: SetPreset(1);VisualProfile.CaveMaterialDebug=1;RefreshVisualProfile();break;
+        case 52: if(!Capture(TEXT("BaseColor")))return;break;
+        case 53: SetPreset(1);VisualProfile.CaveMaterialDebug=2;RefreshVisualProfile();break;
+        case 54: if(!Capture(TEXT("Normals")))return;break;
+        case 55: SetPreset(1);VisualProfile.CaveMaterialDebug=3;RefreshVisualProfile();break;
+        case 56: if(!Capture(TEXT("UV")))return;break;
+        case 57:
+            SetPreset(1);
+            if(VisualProbeScene==0 || VisualProbeScene==7){Advance(11);return;}
+            NextScene();return;
         case 25:
             UE_LOG(LogTemp,Display,TEXT("VF_LANE_RESULT targetY=%.2f actualY=%.2f active=%d reached=%d"),
                 VisualProbeLaneY,Pawn->GetActorLocation().Y,Input?Input->IsLaneMoveActive():false,FMath::Abs(VisualProbeLaneY-Pawn->GetActorLocation().Y)<5.f);
