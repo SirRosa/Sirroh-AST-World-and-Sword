@@ -34,3 +34,5 @@ Nie rozpoczęto. Wymagają akceptacji poprzedniego etapu.
 Mode Legacy (domyślnie); Strength 1; NeutralPadding 10 cm; BackRange 150 cm; FrontRange 130 cm; BackgroundTint (0.76,0.84,1); FogStrength 0.65; Desaturation 0.55; ForegroundTint (0.78,0.66,0.90); ForegroundDarkness 0.55; BlendSeconds 0.25 s. Brak nowych oparów. Brak additive lift i nowej pikselizacji.
 Zachowanie wszystkich pasm ma pierwszeństwo: prostokątne ściany Y=75 i część płytkich naturalnych ścian mogą pozostać neutralne. Dodatkowa semantyka/geometria wymaga osobnej akceptacji.
 Status: kod na feature branch; lokalny asset, kompilacja, testy, obraz i pomiar jeszcze niepotwierdzone. Nie merge'ować.
+
+Wdrożenie: pierwsze polecenie przekroczyło limit Windows przed uruchomieniem; wersjonowany skrypt deploy_visual_foundation_v1.ps1 używa krótkiego launchera i przypiętego SHA. Nie oznacza to błędu implementacji.
