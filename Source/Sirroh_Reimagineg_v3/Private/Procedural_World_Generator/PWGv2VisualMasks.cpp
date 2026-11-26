@@ -1,6 +1,9 @@
 #include "Procedural_World_Generator/PWGv2Generator.h"
 #include "POI/POIShaft.h"
 #include "Materials/MaterialInterface.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/Pawn.h"
+#include "Engine/World.h"
 
 int32 APWGv2Generator::VisualRoleForSection(int32 S)
 {
@@ -150,4 +153,81 @@ void APWGv2Generator::DebugVisualCoverage(const FTransform& Camera,float Width,f
         }
     }
     UE_LOG(LogTemp,Display,TEXT("VF_MASK_COUNTS chunks=%d under=%d proxies=%d visible_triangles=%d POIs=%d"),Chunks.Num(),UndergroundChunks.Num(),Proxies,Triangles,POIs);
+}
+
+bool APWGv2Generator::DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,FVector& Focus,FString& Label)
+{
+    auto* Capsule=Pawn?Pawn->FindComponentByClass<UCapsuleComponent>():nullptr;
+    if(!WorldData || !Capsule || !IsDebugSession())return false;
+    const float Half=Capsule->GetScaledCapsuleHalfHeight(),Radius=Capsule->GetScaledCapsuleRadius();
+    const float CurrentX=GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation()).X;
+    if(Scene==0)
+    {
+        FString Error;
+        Label=TEXT("Tunnel");
+        if(!DebugFindDestination(TEXT("Mountains"),TEXT("Shininglands"),1,Pawn,Target,Error) &&
+           !DebugFindDestination(NAME_None,NAME_None,1,Pawn,Target,Error)) return false;
+        Focus=Target+FVector(0,0,150);
+        return true;
+    }
+    float Centre=0,PreferredX=0,FocusZ=0;
+    int32 Layer=1;
+    if(Scene==1)
+    {
+        Label=TEXT("Shaft");
+        const FPWGv2Portal* Best=nullptr; float Distance=MAX_flt;
+        for(const auto& P:WorldData->Portals)
+            if(P.bKitShaft && P.LowerLayer>1 && P.LowerLayer<=4 && FMath::Abs(P.X-CurrentX)<Distance)
+            {Best=&P;Distance=FMath::Abs(P.X-CurrentX);}
+        if(!Best)return false;
+        Centre=Best->X; Layer=Best->LowerLayer;
+        PreferredX=Centre+(Best->Width*.5f+100.f);
+        FocusZ=LayerFloor(Layer,Centre)+300.f;
+    }
+    else
+    {
+        Label=Scene==2?TEXT("POI"):TEXT("Transition");
+        const FPWGv2RoomChain* Best=nullptr; float Distance=MAX_flt;
+        for(const auto& Chain:WorldData->RoomChains)
+            if(Chain.Layer>0 && Chain.Layer<=4 && Chain.EndX-Chain.StartX>300 && FMath::Abs(Chain.StartX-CurrentX)<Distance)
+            {Best=&Chain;Distance=FMath::Abs(Chain.StartX-CurrentX);}
+        if(!Best)
+        {
+            // Old saves may have isolated authored rooms rather than room chains.
+            int32 Index=INDEX_NONE;
+            for(int32 I=0;I<WorldData->AuthoredPOIs.Num() && I<WorldData->AuthoredPOIPositions.Num();++I)
+                if(WorldData->AuthoredPOIs[I].UpperLayer>0 && FMath::Abs(WorldData->AuthoredPOIPositions[I].X-CurrentX)<Distance)
+                {Index=I;Distance=FMath::Abs(WorldData->AuthoredPOIPositions[I].X-CurrentX);}
+            if(Index==INDEX_NONE)return false;
+            const auto& Row=WorldData->AuthoredPOIs[Index]; const auto& Pos=WorldData->AuthoredPOIPositions[Index];
+            Layer=Row.UpperLayer; Centre=Pos.X+(Scene==3?-Row.Width*.5f:0.f);
+            PreferredX=Centre; FocusZ=LayerFloor(Layer,Centre)+200.f;
+        }
+        else
+        {
+            Layer=Best->Layer;
+            Centre=Scene==2?Best->StartX+FMath::Min((Best->EndX-Best->StartX)*.5f,600.f):Best->StartX;
+            PreferredX=Centre; FocusZ=Best->FloorZ+200.f;
+        }
+    }
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(VisualQATeleport),false,Pawn);
+    for(float Offset:{0.f,100.f,-100.f,250.f,-250.f,450.f,-450.f,700.f,-700.f})
+    {
+        const float X=PreferredX+Offset;
+        if(X<=WorldData->MinX || X>=WorldData->MaxX || LayerCeiling(Layer,X)-LayerFloor(Layer,X)<Half*2.f+20.f)continue;
+        StreamAt(X,true);
+        GetWorld()->FlushLevelStreaming(EFlushLevelStreamingType::Full);
+        const FVector Expected=GetActorTransform().TransformPosition(FVector(X,0,LayerFloor(Layer,X)));
+        FHitResult Hit;
+        if(!GetWorld()->LineTraceSingleByChannel(Hit,Expected+FVector(0,0,100),Expected-FVector(0,0,100),ECC_Pawn,Query) || Hit.ImpactNormal.Z<.7f)continue;
+        const FVector PawnCentre=Hit.ImpactPoint+FVector(0,0,Half+5.f);
+        if(GetWorld()->OverlapBlockingTestByChannel(PawnCentre,Capsule->GetComponentQuat(),ECC_Pawn,FCollisionShape::MakeCapsule(Radius,Half),Query))continue;
+        Target=PawnCentre-(Capsule->GetComponentLocation()-Pawn->GetActorLocation());
+        if(LayerAt(Target)!=Layer)continue;
+        DebugTeleportPinX=X; DebugTeleportPinUntil=GetWorld()->GetTimeSeconds()+3.f;
+        Focus=GetActorTransform().TransformPosition(FVector(Centre,0,FocusZ));
+        UE_LOG(LogTemp,Display,TEXT("VF_SCENE %s target=%s focus=%s layer=%d chunksize=%.0f"),*Label,*Target.ToCompactString(),*Focus.ToCompactString(),Layer,Settings.ChunkLengthMetres*100.f);
+        return true;
+    }
+    return false;
 }

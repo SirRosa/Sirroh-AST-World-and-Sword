@@ -46,6 +46,7 @@ public:
     bool IsVisualMaskPassEnabled() const { return bVisualMaskPassEnabled && bUndergroundView; }
     bool HasProjectedPOIBackground(int32 POIIndex) const;
     void DebugVisualCoverage(const FTransform& Camera,float Width,float Height) const;
+    bool DebugVisualScene(int32 Scene,APawn* Pawn,FVector& Target,FVector& Focus,FString& Label);
     bool IsDebugSession() const { return DebugOriginalWorld != nullptr; }
     UPWGv2WorldSave* GetDebugEditWorld() const { return DebugWorkingWorld; }
     bool DebugRebuild(bool Restore, FString& Error, bool Replan=false);

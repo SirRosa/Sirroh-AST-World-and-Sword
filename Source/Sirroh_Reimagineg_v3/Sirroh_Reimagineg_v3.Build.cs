@@ -15,7 +15,7 @@ public class Sirroh_Reimagineg_v3 : ModuleRules
 
 
                 PublicDependencyModuleNames.AddRange(new string[] { "ControlRig", "RigVM", "SlateCore", "Niagara", "ASTFireRuntime" });
-                PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "Slate", "UMG", "AnimationCore", "DragonIKPlugin", "GameplayTags", "PhysicsCore", "PhysicsControl", "Chooser", "AIModule", "NavigationSystem", "MotionWarping" });
+                PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "Slate", "UMG", "AnimationCore", "DragonIKPlugin", "GameplayTags", "PhysicsCore", "PhysicsControl", "Chooser", "AIModule", "NavigationSystem", "MotionWarping", "RHI" });
                 
                 // Uncomment if you are using online features
                 // PrivateDependencyModuleNames.Add("OnlineSubsystem");

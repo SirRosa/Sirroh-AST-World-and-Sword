@@ -425,6 +425,16 @@ private:
     FRotator VisualProbeRotation=FRotator::ZeroRotator;
     float VisualProbeWidth=0.f;
     TWeakObjectPtr<AActor> VisualProbeTorch;
+    int32 VisualProbeScene=0;
+    FVector VisualProbeFocus=FVector::ZeroVector;
+    FVector VisualProbeTarget=FVector::ZeroVector;
+    FVector VisualProbePawn=FVector::ZeroVector;
+    FString VisualProbeLabel;
+    float VisualProbeLaneY=0.f;
+    bool bVisualProbeDisableMaskPass=false;
+    TArray<float> VisualProbeGPU;
+    TArray<float> VisualProbeCPU;
+    double VisualProbeLastFrame=0.0;
     int32 SkyVerificationFrame = 0;
 #endif
     void StartDynamicSky();

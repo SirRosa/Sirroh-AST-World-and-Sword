@@ -1030,7 +1030,11 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     }
     const bool bV2=Profile.ResolveMode(bUndergroundView && S.bDepthAtmosphere,IsValid(StylizedDepthMaterial))
         ==EPWGVisualMode::Underground_Stylized;
+#if !UE_BUILD_SHIPPING
+    WorldGenerator->SetVisualMaskPassEnabled(bV2 && !bVisualProbeDisableMaskPass);
+#else
     WorldGenerator->SetVisualMaskPassEnabled(bV2);
+#endif
     UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
     if (ActiveDepthMaterial.Get()!=Material)
     {
