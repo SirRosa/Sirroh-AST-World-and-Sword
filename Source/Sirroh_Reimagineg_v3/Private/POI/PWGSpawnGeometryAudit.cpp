@@ -137,6 +137,11 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                         ++LitDepth; TestTrue(TEXT("Depth formation is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_BackgroundLit")));
                         TestFalse(TEXT("Depth formation has no collision"),Part->bEnableCollision);
                     }
+                    else if (const auto* PixelBatch=G->DecorationChunks.Find(Pair.Key); PixelBatch && PixelBatch->PixelPlans.Contains(S))
+                    {
+                        TestTrue(TEXT("Pixel2D background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_PixelBackground")));
+                        TestFalse(TEXT("Pixel2D background has no collision"),Part->bEnableCollision);
+                    }
                     else if (S>=G->SolidCutawaySectionBase+4) { ++LitProjected; TestTrue(TEXT("Projected POI background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_KitImageFit_LitBackground"))); }
                 }
             // Direct card path is also exercised when this seed has only projected room backgrounds.
