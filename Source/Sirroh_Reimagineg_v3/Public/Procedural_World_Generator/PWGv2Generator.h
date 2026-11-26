@@ -6,10 +6,58 @@
 #include "PWGv2Generator.generated.h"
 
 class UHierarchicalInstancedStaticMeshComponent;
+class UInstancedStaticMeshComponent;
+class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
 class APWGEnvironmentV2;
 struct FPWGVisualProfile;
+
+UENUM(BlueprintType)
+enum class EPWGDepthComposition : uint8 { Mixed, Sedimentary, Karst, OpenVault };
+
+// Visual authoring data, deliberately outside the serialized world state.
+USTRUCT(BlueprintType)
+struct FPWGDepthFormationProfile
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Layer=1;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FName Biome=NAME_None;
+    // Bits: strata, fracture, overhang, speleothem, boulders, ridge.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1",ClampMax="63")) int32 FamilyMask=63;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) EPWGDepthComposition Composition=EPWGDepthComposition::Mixed;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=".4",ClampMax="1.6")) float Scale=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=".1",ClampMax="1")) float Density=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="5",ClampMax="50")) float VisualDepthMetres=22.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="1",ClampMax="3")) int32 FormationPlans=3;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0",ClampMax="1")) float DetailIntensity=1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0",ClampMax="1.5")) float AtmosphereIntensity=1.f;
+    // Optional overrides use the cave shader parameter contract, in near/mid/far/closure order.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<TSoftObjectPtr<UMaterialInterface>> PlanMaterials;
+    FPWGDepthFormationProfile Sanitized() const
+    {
+        auto R=*this;
+        R.Layer=FMath::Clamp(Layer,1,4);R.FamilyMask=FMath::Clamp(FamilyMask,1,63);
+        R.Scale=FMath::Clamp(FMath::IsFinite(Scale)?Scale:1.f,.4f,1.6f);
+        R.Density=FMath::Clamp(FMath::IsFinite(Density)?Density:1.f,.1f,1.f);
+        R.VisualDepthMetres=FMath::Clamp(FMath::IsFinite(VisualDepthMetres)?VisualDepthMetres:22.f,5.f,50.f);
+        R.FormationPlans=FMath::Clamp(FormationPlans,1,3);
+        R.DetailIntensity=FMath::Clamp(FMath::IsFinite(DetailIntensity)?DetailIntensity:1.f,0.f,1.f);
+        R.AtmosphereIntensity=FMath::Clamp(FMath::IsFinite(AtmosphereIntensity)?AtmosphereIntensity:1.f,0.f,1.5f);
+        return R;
+    }
+    static FPWGDepthFormationProfile Resolve(const TArray<FPWGDepthFormationProfile>& Rows,int32 L,FName B)
+    {
+        FPWGDepthFormationProfile R; R.Layer=FMath::Clamp(L,1,4);
+        if(L==1){R.Composition=EPWGDepthComposition::Sedimentary;R.Scale=.85f;R.Density=.85f;R.VisualDepthMetres=14.f;R.FormationPlans=2;R.AtmosphereIntensity=.85f;}
+        if(L==2){R.Composition=EPWGDepthComposition::Karst;R.VisualDepthMetres=26.f;}
+        if(L==3){R.Composition=EPWGDepthComposition::Mixed;R.VisualDepthMetres=30.f;}
+        if(L==4){R.Composition=EPWGDepthComposition::OpenVault;R.Scale=1.25f;R.Density=.68f;R.VisualDepthMetres=38.f;R.DetailIntensity=.85f;R.AtmosphereIntensity=1.15f;}
+        for(const auto& P:Rows)if(P.Layer==L && P.Biome.IsNone()){R=P;break;}
+        if(!B.IsNone())for(const auto& P:Rows)if(P.Layer==L && P.Biome==B){R=P;break;}
+        return R.Sanitized();
+    }
+};
 
 USTRUCT()
 struct FPWGv2DecorationBatch
@@ -43,6 +91,10 @@ public:
     void SetVisualMaskPassEnabled(bool bEnabled);
     void SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking);
     void UpdateCaveReference(const FPWGVisualProfile& Profile,bool bAllowed,const FVector& View,float Width,float Height,const FVector& Pawn);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG|Depth Formation Profiles")
+    TArray<FPWGDepthFormationProfile> DepthFormationProfiles;
+    FPWGDepthFormationProfile ResolveDepthFormationProfile(int32 Layer,float LocalX) const;
+    float GetCaveReferenceAtmosphereMultiplier() const {return bCaveReferenceUsesProfiles?CaveReferenceResolved.AtmosphereIntensity:1.f;}
     void ResetCaveReference();
     bool IsCaveReferenceActive() const {return bCaveReferenceActive && bUndergroundView;}
     float GetCaveReferenceStart() const {return CaveReferenceStart;}
@@ -186,6 +238,8 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> CaveReferenceInstanceMaterials;
     TArray<int32> CaveReferenceInstancePlans;
     bool bCaveReferenceHybrid=false;
+    bool bCaveReferenceUsesProfiles=false;
+    FPWGDepthFormationProfile CaveReferenceResolved;
     void ClearCaveReferenceInstances();
     FVector CaveReferenceAnchor=FVector::ZeroVector;
     float CaveReferenceWidth=0.f, CaveReferenceHeight=0.f, CaveReferenceHalfWidth=0.f;
@@ -194,7 +248,7 @@ private:
     float CaveReferenceTextures[4]={-1.f,-1.f,-1.f,-1.f};
     float CaveReferenceFlatAlbedo=-1.f;
     int32 CaveReferenceLastDebug=-1;
-    UMaterialInstanceDynamic* CreateCaveReferenceMaterial(int32 Layer);
+    UMaterialInstanceDynamic* CreateCaveReferenceMaterial(int32 Layer,int32 Plan);
     bool BuildCaveReference(const FVector& Pawn,float Depth,bool bHybrid);
     bool SuppressCaveReferenceOriginal(const FPWGv2DecorationBatch& Batch,int32 Section) const;
     int32 DepthPrototypeFormationCount=2;

@@ -1115,8 +1115,9 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     {
         const FVector ProfileOrigin=WorldGenerator->GetActorLocation();
         const float Neutral=Profile.ProtectedHalfWidth(S.LaneSpacing);
+        const float CaveAtmosphere=WorldGenerator->GetCaveReferenceAtmosphereMultiplier();
         if (!bProfileUniformsInitialized || !Profile.SameShaderValues(LastProfileUniforms)
-            || !ProfileOrigin.Equals(LastProfileOrigin) || Neutral!=LastProfileNeutralWidth)
+            || !ProfileOrigin.Equals(LastProfileOrigin) || Neutral!=LastProfileNeutralWidth || CaveAtmosphere!=LastCaveProfileAtmosphere)
         {
             Material->SetVectorParameterValue(TEXT("ProfileOrigin"),FLinearColor(ProfileOrigin.X,ProfileOrigin.Y,ProfileOrigin.Z,0));
             Material->SetVectorParameterValue(TEXT("ProfileBackgroundTint"),Profile.BackgroundTint);
@@ -1155,9 +1156,9 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
                     const auto& G=Profile.CaveGrade(I);
                     Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveGrade%d"),I),FLinearColor(G.Brightness,G.Contrast,G.Saturation,G.Haze));
                     Material->SetVectorParameterValue(*FString::Printf(TEXT("CaveTint%d"),I),G.Tint);
-                    Scalar(*FString::Printf(TEXT("CaveHaze%d"),I),G.Haze);
+                    Scalar(*FString::Printf(TEXT("CaveHaze%d"),I),FMath::Clamp(G.Haze*CaveAtmosphere,0.f,1.f));
                 }
-            LastProfileUniforms=Profile;
+            LastProfileUniforms=Profile; LastCaveProfileAtmosphere=CaveAtmosphere;
             LastProfileOrigin=ProfileOrigin;
             LastProfileNeutralWidth=Neutral;
         }

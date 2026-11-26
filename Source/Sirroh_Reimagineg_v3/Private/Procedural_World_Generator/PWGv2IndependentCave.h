@@ -11,7 +11,7 @@ namespace PWGIndependentCave
     {
         double Scale=1., Density=1.;
         uint32 Families=0x3f;
-        int32 PlanCount=3; // plus closure
+        int32 PlanCount=3, Composition=0; // plus closure
         bool Allows(EFamily F) const {return (Families&(1u<<uint8(F)))!=0;}
     };
     inline FVector2D Project(FVector P,FVector N)
@@ -177,15 +177,25 @@ namespace PWGIndependentCave
     {
         const double H=FMath::Max(240.0,Roof-Floor);
         FRandomStream R(Seed);
+        int32 Counts[3]={};
         auto Form=[&](int32 Plan,EFamily Kind,double Pos,double Low,double High,double Radius,bool Hanging=false)
         {
-            if(Plan>=Recipe.PlanCount || !Recipe.Allows(Kind))return;
+            if(Plan>=Recipe.PlanCount)return;
+            if(Recipe.Composition==1 && Kind==EFamily::Speleothem)Kind=EFamily::Strata;
+            if(Recipe.Composition==2 && Kind==EFamily::Strata)Kind=EFamily::Speleothem;
+            if(Recipe.Composition==3){Pos*=1.13;Radius*=.85;}
+            if(!Recipe.Allows(Kind))
+            {
+                for(int32 K=0;K<6;++K)if(Recipe.Allows(static_cast<EFamily>(K))){Kind=static_cast<EFamily>(K);break;}
+                if(!Recipe.Allows(Kind))return;
+            }
             const double Fractions[3]={.10,.36,.65};
             const double Y=Start+Depth*Fractions[Plan];
             const double J=R.FRandRange(-.022f,.022f);
             const double Size=FMath::Clamp(Recipe.Scale,.4,1.6);
             const double HH=(High-Low)*H*Size;
-            if(Recipe.Density<1. && R.FRand()>Recipe.Density)return;
+            if(Counts[Plan]>0 && Recipe.Density<1. && R.FRand()>Recipe.Density)return;
+            ++Counts[Plan];
             const FVector C(X+(Pos+J)*Width,Y,Floor+(Low+High)*.5*H);
             const double RX=Radius*Width*Size*R.FRandRange(.88f,1.12f),RY=Depth*(Plan==0?.028:Plan==1?.038:.045);
             if(Hybrid)HybridFormation(*Hybrid,R,Plan,Kind,C,RX,RY,HH,Hanging);

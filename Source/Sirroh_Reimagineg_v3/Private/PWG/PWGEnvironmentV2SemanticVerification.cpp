@@ -52,7 +52,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     {
         VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
         VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
-        if(bCaveQA){VisualProfile.bCaveReference=true; if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
+        if(bCaveQA){VisualProfile.bCaveReference=true; if(VisualProbeScene==7 || VisualProbeScene==8)VisualProfile.bUseDepthFormationProfiles=true;}
         VisualProfile.BlendSeconds=0.f; VisualProfile.bVisualizeMasks=bMasks && !bDepthQA;
         VisualProfile.bVisualizeDepthLayers=bMasks && bDepthQA;
         VisualProfile.bCompareStage1=!bDepthQA || bStage1;

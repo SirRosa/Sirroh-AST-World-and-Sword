@@ -7,6 +7,14 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 
+FPWGDepthFormationProfile APWGv2Generator::ResolveDepthFormationProfile(int32 Layer,float LocalX) const
+{
+    FName Biome=NAME_None;
+    if(WorldData)for(const auto& Span:WorldData->Biomes)
+        if(LocalX>=Span.StartX && LocalX<Span.EndX){Biome=Span.Id;break;}
+    return FPWGDepthFormationProfile::Resolve(DepthFormationProfiles,Layer,Biome);
+}
+
 void APWGv2Generator::ClearCaveReferenceInstances()
 {
     for(const auto& C:CaveReferenceInstances)if(IsValid(C))C->DestroyComponent();
@@ -16,7 +24,7 @@ void APWGv2Generator::ClearCaveReferenceInstances()
 void APWGv2Generator::ResetCaveReference()
 {
     const bool bWasActive=bCaveReferenceActive;
-    bCaveReferenceActive=false; bCaveReferencePinned=false;
+    bCaveReferenceActive=false; bCaveReferencePinned=false; bCaveReferenceUsesProfiles=false;
     if(IsValid(CaveReferenceMesh)) CaveReferenceMesh->DestroyComponent();
     CaveReferenceMesh=nullptr; CaveReferenceMaterials.Reset(); ClearCaveReferenceInstances();
     for(float& V:CaveReferenceTextures) V=-1.f;
@@ -60,7 +68,7 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
         CaveReferenceMaterials.Reset();
         for(int32 I=0;I<4;++I)
         {
-            auto* M=CreateCaveReferenceMaterial(Layer);
+            auto* M=CreateCaveReferenceMaterial(Layer,I);
             if(!M){CaveReferenceMaterials.Reset();return false;}
             CaveReferenceMaterials.Add(M);
         }
@@ -71,8 +79,17 @@ bool APWGv2Generator::BuildCaveReference(const FVector& Pawn,float Depth,bool bH
     CaveReferenceStart=FMath::Max(125.f,Settings.LaneSpacing+65.f);
     CaveReferenceDepth=Depth;
     FPWGv2MeshBuffers B[4]; TArray<PWGIndependentCave::FHybridInstance> Instances;
+    PWGIndependentCave::FRecipe Recipe;
+    if(bCaveReferenceUsesProfiles)
+    {
+        Recipe.Scale=CaveReferenceResolved.Scale;Recipe.Density=CaveReferenceResolved.Density;
+        Recipe.Families=uint32(CaveReferenceResolved.FamilyMask);Recipe.PlanCount=CaveReferenceResolved.FormationPlans;
+        Recipe.Composition=int32(CaveReferenceResolved.Composition);
+        UE_LOG(LogTemp,Display,TEXT("VF_CAVE_PROFILE layer=%d biome=%s depth=%.1f plans=%d familymask=%d scale=%.2f density=%.2f"),
+            Layer,*CaveReferenceResolved.Biome.ToString(),Depth,Recipe.PlanCount,CaveReferenceResolved.FamilyMask,Recipe.Scale,Recipe.Density);
+    }
     PWGIndependentCave::Build(B,Seed,CaveReferenceAnchor.X,Floor,Roof,CaveReferenceWidth,
-        CaveReferenceAnchor.Z,CaveReferenceHeight,CaveReferenceHalfWidth,CaveReferenceStart,Depth,PWGIndependentCave::FRecipe(),bHybrid?&Instances:nullptr);
+        CaveReferenceAnchor.Z,CaveReferenceHeight,CaveReferenceHalfWidth,CaveReferenceStart,Depth,Recipe,bHybrid?&Instances:nullptr);
     if(!IsValid(CaveReferenceMesh))
     {
         CaveReferenceMesh=NewObject<UProceduralMeshComponent>(this);
@@ -153,23 +170,27 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
         if(bCaveReferencePinned || IsValid(CaveReferenceMesh)) ResetCaveReference();
         return;
     }
+    if(bCaveReferencePinned && bCaveReferenceUsesProfiles!=Profile.bUseDepthFormationProfiles) ResetCaveReference();
     const FVector LocalView=GetActorTransform().InverseTransformPosition(View);
     if(bAllowed && !bCaveReferencePinned && bUndergroundView && Width>100.f && Height>100.f)
     {
         CaveReferenceAnchor=FVector(LocalView.X,0,LocalView.Z);
         CaveReferenceWidth=Width; CaveReferenceHeight=Height;
         CaveReferenceHalfWidth=Width*.95f+2.f*Settings.ChunkLengthMetres*100.f;
+        bCaveReferenceUsesProfiles=Profile.bUseDepthFormationProfiles;
+        if(bCaveReferenceUsesProfiles)CaveReferenceResolved=ResolveDepthFormationProfile(LayerAt(Pawn),CaveReferenceAnchor.X);
         bCaveReferencePinned=true;
     }
     bool bWanted=bAllowed && bUndergroundView && bCaveReferencePinned && BackgroundAuditIsolation==0
         && FMath::Abs(LocalView.X-CaveReferenceAnchor.X)<=CaveReferenceWidth*.22
         && FMath::Abs(LocalView.Z-CaveReferenceAnchor.Z)<=CaveReferenceHeight*.28
         && Width<=CaveReferenceWidth*1.15f && Height<=CaveReferenceHeight*1.15f;
-    if(bWanted && (!IsValid(CaveReferenceMesh) || CaveReferenceDepth!=Profile.CaveVisualDepthMetres*100.f || bCaveReferenceHybrid!=Profile.bCaveHybridFormations))
+    const float WantedDepth=100.f*(bCaveReferenceUsesProfiles?CaveReferenceResolved.VisualDepthMetres:Profile.CaveVisualDepthMetres);
+    if(bWanted && (!IsValid(CaveReferenceMesh) || CaveReferenceDepth!=WantedDepth || bCaveReferenceHybrid!=Profile.bCaveHybridFormations))
     {
         // Do not retry missing assets on every tick. Toggling the reference resets the latch.
         if(CaveReferenceDepth<0.f) bWanted=false;
-        else if(!BuildCaveReference(Pawn,Profile.CaveVisualDepthMetres*100.f,Profile.bCaveHybridFormations))
+        else if(!BuildCaveReference(Pawn,WantedDepth,Profile.bCaveHybridFormations))
         {
             CaveReferenceDepth=-1.f; bWanted=false;
             UE_LOG(LogTemp,Error,TEXT("VF_CAVE_REFERENCE failed to build; Stage 1 retained"));
@@ -200,7 +221,7 @@ void APWGv2Generator::UpdateCaveReference(const FPWGVisualProfile& Profile,bool 
         for(int32 I=0;I<4;++I)
         {
             if(CaveReferenceMesh->GetProcMeshSection(I) && CaveReferenceMesh->IsMeshSectionVisible(I)!=Show[I]) CaveReferenceMesh->SetMeshSectionVisible(I,Show[I]);
-            const float T=Profile.CaveGrade(I).TextureIntensity;
+            const float T=Profile.CaveGrade(I).TextureIntensity*(bCaveReferenceUsesProfiles?CaveReferenceResolved.DetailIntensity:1.f);
             if(CaveReferenceMaterials.IsValidIndex(I) && CaveReferenceTextures[I]!=T)
             {
                 CaveReferenceMaterials[I]->SetScalarParameterValue(TEXT("CaveTextureIntensity"),T);

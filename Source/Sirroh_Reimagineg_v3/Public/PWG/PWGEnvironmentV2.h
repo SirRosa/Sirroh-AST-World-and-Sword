@@ -220,6 +220,8 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bCaveHybridFormations=true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
+    bool bUseDepthFormationProfiles=false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference")
     bool bUseReliefCheckpoint=false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Independent Cave Reference",meta=(ClampMin="5.0",ClampMax="50.0",Units="m"))
     float CaveVisualDepthMetres=22.f;
@@ -654,6 +656,7 @@ private:
     FPWGVisualProfile LastProfileUniforms;
     FVector LastProfileOrigin = FVector::ZeroVector;
     float LastProfileNeutralWidth = 0.f;
+    float LastCaveProfileAtmosphere = -1.f;
     float ProfileMix = 0.f;
     float LastDepthSunAmount = 1.f;
     float DepthGroundZ = 0;

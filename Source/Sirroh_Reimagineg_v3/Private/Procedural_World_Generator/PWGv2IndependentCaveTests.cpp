@@ -1,5 +1,6 @@
 #include "PWGv2IndependentCave.h"
 #include "PWG/PWGEnvironmentV2.h"
+#include "Procedural_World_Generator/PWGv2Generator.h"
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPWGIndependentCaveTest,"Sirroh.PWG.IndependentCave",
@@ -46,6 +47,17 @@ bool FPWGIndependentCaveTest::RunTest(const FString&)
         {
             TestTrue(TEXT("Instance recipe stays within depth plan"),(I.Centre.Y-I.Extent.Y-165.)/2200.>=Min[I.Plan] && (I.Centre.Y+I.Extent.Y-165.)/2200.<Max[I.Plan]);
         }
+    }
+    {
+        TArray<FPWGDepthFormationProfile> Rows;
+        FPWGDepthFormationProfile L;L.Layer=2;L.VisualDepthMetres=24;Rows.Add(L);
+        L.Biome=TEXT("TestBiome");L.VisualDepthMetres=99;Rows.Add(L);
+        TestEqual(TEXT("Layer default"),FPWGDepthFormationProfile::Resolve(Rows,2,NAME_None).VisualDepthMetres,24.f);
+        TestEqual(TEXT("Biome overrides layer and clamps"),FPWGDepthFormationProfile::Resolve(Rows,2,TEXT("TestBiome")).VisualDepthMetres,50.f);
+        TestTrue(TEXT("Deep and shallow profiles differ"),FPWGDepthFormationProfile::Resolve(Rows,4,NAME_None).VisualDepthMetres>FPWGDepthFormationProfile::Resolve(Rows,1,NAME_None).VisualDepthMetres);
+        FPWGv2MeshBuffers A[4];PWGIndependentCave::FRecipe R;R.Families=16;R.PlanCount=1;R.Density=.1;
+        PWGIndependentCave::Build(A,123,0,0,800,1520,400,900,5000,165,2200,R);
+        TestTrue(TEXT("Profile plan and family restriction"),!A[0].V.IsEmpty() && A[1].V.IsEmpty() && A[2].V.IsEmpty() && !A[3].V.IsEmpty());
     }
     FPWGVisualProfile P=FPWGVisualProfile::DemoPreset(3);
     TestTrue(TEXT("Demo opts into independent scene"),P.bCaveReference && !P.bUseReliefCheckpoint);
