@@ -4,6 +4,7 @@
 #include "Sword/SwordWorldSubsystem.h"
 #include "Sword/ProceduralSword.h"
 #include "PWGv2Mesh.h"
+#include "PWGv2DepthPrototype.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "POI/POIArtPool.h"
@@ -739,6 +740,40 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
         if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Shaft front"),false):nullptr)
             for (auto& UV:Entry.Value.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);
         Entry.Value.Submit(Mesh,Section); Mesh->SetMaterial(Section,WallMaterial(Layer,true,true));
+    }
+    // Append prototype sections after all existing POI sections. The old rear
+    // sections remain intact for exact A/B; SolidEarth, cutaway and hulls are untouched.
+    // EarthY is the physical cap: a deeper plan would be occluded by the opaque earth.
+    auto& DepthBatch=DecorationChunks.FindOrAdd(Index);
+    const double DepthSpan=double(EarthY)-260.0;
+    if (bUnified && DepthSpan>=120.0)
+    {
+        const int32 OriginalSections=Mesh->GetNumSections();
+        for (int32 S=5;S<OriginalSections && S<=16;++S)
+        {
+            if (S>9 && S<13) continue;
+            const FProcMeshSection* Part=Mesh->GetProcMeshSection(S);
+            if (!Part || Part->ProcIndexBuffer.IsEmpty()) continue;
+            const FProcMeshSection Source=*Part; // append invalidates source pointers
+            UMaterialInterface* Material=Mesh->GetMaterial(S);
+            if (!Material || Material->GetBlendMode()!=BLEND_Opaque) continue;
+            int32 Section=Mesh->GetNumSections();
+            Mesh->SetProcMeshSection(Section,PWGDepthPrototype::BuildBacking(Source,DepthSpan));
+            Mesh->SetMaterial(Section,Material);
+            Mesh->SetMeshSectionVisible(Section,false);
+            DepthBatch.DepthPrototypePlans.Add(Section,2);
+            DepthBatch.DepthPrototypeReplacedSections.Add(S);
+            for (int32 Plan=0;Plan<2;++Plan)
+            {
+                FPWGv2MeshBuffers Form;
+                PWGDepthPrototype::BuildFormation(Source,WorldData->Seed,Plan,DepthSpan,Form);
+                if (Form.V.IsEmpty()) continue;
+                Section=Mesh->GetNumSections();
+                Form.Submit(Mesh,Section); Mesh->SetMaterial(Section,Material);
+                Mesh->SetMeshSectionVisible(Section,false);
+                DepthBatch.DepthPrototypePlans.Add(Section,Plan);
+            }
+        }
     }
     Mesh->SetCollisionConvexMeshes(Hulls);
     Mesh->SetCanEverAffectNavigation(Hulls.Num()>0);

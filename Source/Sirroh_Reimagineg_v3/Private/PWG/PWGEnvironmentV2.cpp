@@ -1004,9 +1004,9 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
     const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
-    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient"),
+    return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient | Depth prototype asset: %s"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
-        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f);
+        bUndergroundView?TEXT("underground"):TEXT("surface"),bV2?ProfileMix:0.f,bHasDepthPrototypeAsset?TEXT("loaded"):TEXT("not loaded"));
 }
 
 void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
@@ -1023,8 +1023,19 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     if (bWantsV2 && !bTriedStylizedDepthAsset)
     {
         bTriedStylizedDepthAsset=true;
-        if (UMaterialInterface* Parent=StylizedDepthAsset.LoadSynchronous())
+        if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_DepthLayersPrototype.M_PWGv2_DepthAtmosphere_DepthLayersPrototype")))
+        {
             StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+            bHasDepthPrototypeAsset=IsValid(StylizedDepthMaterial);
+        }
+        if (!StylizedDepthMaterial)
+        {
+            if (UMaterialInterface* Parent=StylizedDepthAsset.LoadSynchronous())
+                StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
+            if (StylizedDepthMaterial)
+                UE_LOG(LogPWGEnvironmentV2,Warning,TEXT("Depth Layers prototype asset unavailable; using Stage 1 SemanticPOI."));
+        }
         if (!StylizedDepthMaterial)
             UE_LOG(LogPWGEnvironmentV2,Warning,TEXT("Visual Foundation V2 asset unavailable; using Legacy."));
     }
@@ -1035,6 +1046,8 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
 #else
     WorldGenerator->SetVisualMaskPassEnabled(bV2);
 #endif
+    WorldGenerator->SetDepthPrototypePresentation(bV2 && bHasDepthPrototypeAsset && Profile.bEnableDepthLayers,
+        Profile.DepthFormationCount,Profile.bShowDepthNear,Profile.bShowDepthMid,Profile.bShowDepthBacking);
     UMaterialInstanceDynamic* Material=bV2?StylizedDepthMaterial.Get():DepthMaterial.Get();
     if (ActiveDepthMaterial.Get()!=Material)
     {
@@ -1110,9 +1123,28 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
             Scalar(TEXT("ProfileGameplayContrast"),Profile.GameplayContrast);
             Material->SetVectorParameterValue(TEXT("ProfileGameplayTint"),Profile.GameplayTint);
             Scalar(TEXT("ProfileVisualizeMasks"),Profile.bVisualizeMasks?1.f:0.f);
+            if (bHasDepthPrototypeAsset)
+            {
+                Scalar(TEXT("DepthGradeEnabled"),Profile.bEnableDepthGrading?1.f:0.f);
+                Scalar(TEXT("DepthGradeStart"),Profile.DepthStart);
+                Scalar(TEXT("DepthGradeRange"),Profile.DepthRange);
+                Scalar(TEXT("DepthGradeBrightness"),Profile.DepthBrightness);
+                Scalar(TEXT("DepthGradeContrast"),Profile.DepthContrast);
+                Scalar(TEXT("DepthGradeDesaturation"),Profile.DepthDesaturation);
+                Scalar(TEXT("DepthGradeTintStrength"),Profile.DepthTintStrength);
+                Scalar(TEXT("DepthGradeFog"),Profile.DepthFog);
+                Material->SetVectorParameterValue(TEXT("DepthGradeTint"),Profile.DepthTint);
+                Scalar(TEXT("DepthLayerDebug"),Profile.bVisualizeDepthLayers?1.f:0.f);
+            }
             LastProfileUniforms=Profile;
             LastProfileOrigin=ProfileOrigin;
             LastProfileNeutralWidth=Neutral;
+        }
+        if (bHasDepthPrototypeAsset)
+        {
+            // Matches the prototype's physical rear bounds, not Pawn or grading range.
+            Scalar(TEXT("DepthLayerSpan"),FMath::Max(1.f,FMath::Min(S.BackgroundDepth,S.LaneSpacing+450.f)-260.f));
+            Scalar(TEXT("DepthLayerActive"),WorldGenerator->IsDepthPrototypeActive()?1.f:0.f);
         }
         const float NextMix=Profile.BlendSeconds<=KINDA_SMALL_NUMBER?1.f:
             FMath::FInterpConstantTo(ProfileMix,1.f,GetWorld()->GetDeltaSeconds(),1.f/Profile.BlendSeconds);

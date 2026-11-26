@@ -292,6 +292,30 @@ void APWGv2Generator::BuildDecorationsV2(int32 Index,float Start,float End)
     }
 }
 
+void APWGv2Generator::SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking)
+{
+    FormationCount=FMath::Clamp(FormationCount,0,2);
+    if (bDepthPrototypeActive==bEnabled && DepthPrototypeFormationCount==FormationCount
+        && bDepthPrototypeNear==bNear && bDepthPrototypeMid==bMid && bDepthPrototypeBacking==bBacking) return;
+    bDepthPrototypeActive=bEnabled;
+    DepthPrototypeFormationCount=FormationCount;
+    bDepthPrototypeNear=bNear; bDepthPrototypeMid=bMid; bDepthPrototypeBacking=bBacking;
+    for (const auto& Pair:UndergroundChunks) ApplyChunkLayerVisibility(Pair.Key);
+}
+
+bool APWGv2Generator::IsDepthPrototypeSectionVisible(const FPWGv2DecorationBatch& Batch,int32 Section) const
+{
+    const bool bActive=IsDepthPrototypeActive();
+    if (const int32* Plan=Batch.DepthPrototypePlans.Find(Section))
+    {
+        if (!bActive) return false;
+        if (*Plan==0) return DepthPrototypeFormationCount>=1 && bDepthPrototypeNear;
+        if (*Plan==1) return DepthPrototypeFormationCount>=2 && bDepthPrototypeMid;
+        return bDepthPrototypeBacking;
+    }
+    return !bActive || !Batch.DepthPrototypeReplacedSections.Contains(Section);
+}
+
 void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
 {
     // Render state only: keep hulls, navigation, actors, simulation and streaming intact.
@@ -332,7 +356,7 @@ void APWGv2Generator::ApplyChunkLayerVisibility(int32 Index)
             for (int32 Section=0;Section<Batch->UndergroundSectionBounds.Num();++Section)
                 if (Batch->UndergroundSectionBounds[Section].IsValid)
                 {
-                    const bool bVisible=(bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && IsBackgroundAuditSectionVisible(Section);
+                    const bool bVisible=(bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && IsBackgroundAuditSectionVisible(Section) && IsDepthPrototypeSectionVisible(*Batch,Section);
                     if (Mesh->IsMeshSectionVisible(Section)!=bVisible) Mesh->SetMeshSectionVisible(Section,bVisible);
                     // The same solid earth is visible behind surface slopes and through
                     // underground shell openings. Only change its material in the latter view.
@@ -401,7 +425,7 @@ void APWGv2Generator::UpdateGameplayView(const FTransform& Camera, float ViewWid
             {
                 const FBox& Bounds = Batch.UndergroundSectionBounds[Section];
                 if (!Bounds.IsValid) continue;
-                const bool bVisible = (bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && InView(Bounds) && IsBackgroundAuditSectionVisible(Section);
+                const bool bVisible = (bUndergroundView || IsSurfaceVisibleUndergroundSection(Section)) && InView(Bounds) && IsBackgroundAuditSectionVisible(Section) && IsDepthPrototypeSectionVisible(Batch,Section);
                 if (Mesh->IsMeshSectionVisible(Section) != bVisible)
                     Mesh->SetMeshSectionVisible(Section, bVisible);
             }

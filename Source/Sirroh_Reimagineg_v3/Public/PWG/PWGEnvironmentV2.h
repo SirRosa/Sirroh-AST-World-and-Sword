@@ -138,6 +138,51 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual Profile")
     FLinearColor GameplayTint = FLinearColor(.96f,.91f,1.f,1.f);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bEnableDepthGrading = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="2000.0", Units="cm"))
+    float DepthStart = 100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="20.0", ClampMax="4000.0", Units="cm"))
+    float DepthRange = 450.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="3.0"))
+    float DepthBrightness = 1.25f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.4", ClampMax="2.5"))
+    float DepthContrast = .85f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float DepthDesaturation = .5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float DepthTintStrength = .45f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float DepthFog = .75f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    FLinearColor DepthTint = FLinearColor(.78f,.84f,1.f,1.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bEnableDepthLayers = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers", meta=(ClampMin="0", ClampMax="2"))
+    int32 DepthFormationCount = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bShowDepthNear = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bShowDepthMid = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bShowDepthBacking = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Depth Layers")
+    bool bVisualizeDepthLayers = false;
+
     // Artistic lift is never applied to gameplay geometry. Character/items remain ungraded.
     static FPWGVisualProfile DemoPreset(int32 Index)
     {
@@ -148,6 +193,7 @@ struct FPWGVisualProfile
             P.bDisableBackgroundAmbient=true; P.FogStrength=0.f; P.Desaturation=.10f;
             P.BackgroundTint=FLinearColor::White; P.AtmosphereColor=FLinearColor(.35f,.36f,.42f,1.f);
             P.GameplayBrightness=1.f; P.GameplayContrast=1.f; P.GameplayTint=FLinearColor::White; P.ForegroundDarkness=.40f;
+            P.DepthBrightness=1.f; P.DepthContrast=1.f; P.DepthFog=0.f; P.DepthTintStrength=0.f;
         }
         else if(Index==2)
         {
@@ -155,6 +201,7 @@ struct FPWGVisualProfile
             P.BackgroundTint=FLinearColor(1.f,.82f,.62f,1.f); P.AtmosphereColor=FLinearColor(.70f,.46f,.28f,1.f);
             P.Desaturation=.45f; P.FogStrength=.30f; P.ForegroundTint=FLinearColor(.82f,.69f,.56f,1.f);
             P.GameplayTint=FLinearColor(1.f,.88f,.72f,1.f); P.GameplayBrightness=1.15f;
+            P.DepthTint=FLinearColor(1.f,.77f,.55f,1.f);
         }
         return P;
     }
@@ -202,6 +249,15 @@ struct FPWGVisualProfile
         Out.GameplayContrast = Safe(GameplayContrast,Defaults.GameplayContrast,0.4f,2.5f);
         Out.GameplayTint = Color(GameplayTint,Defaults.GameplayTint);
         Out.BlendSeconds = Safe(BlendSeconds,Defaults.BlendSeconds,0.f,5.f);
+        Out.DepthStart = Safe(DepthStart,Defaults.DepthStart,0.f,2000.f);
+        Out.DepthRange = Safe(DepthRange,Defaults.DepthRange,20.f,4000.f);
+        Out.DepthBrightness = Safe(DepthBrightness,Defaults.DepthBrightness,0.f,3.f);
+        Out.DepthContrast = Safe(DepthContrast,Defaults.DepthContrast,.4f,2.5f);
+        Out.DepthDesaturation = Safe(DepthDesaturation,Defaults.DepthDesaturation,0.f,1.f);
+        Out.DepthTintStrength = Safe(DepthTintStrength,Defaults.DepthTintStrength,0.f,1.f);
+        Out.DepthFog = Safe(DepthFog,Defaults.DepthFog,0.f,1.f);
+        Out.DepthTint = Color(DepthTint,Defaults.DepthTint);
+        Out.DepthFormationCount = FMath::Clamp(DepthFormationCount,0,2);
         return Out;
     }
 
@@ -228,7 +284,11 @@ struct FPWGVisualProfile
             && BackgroundBrightness == Other.BackgroundBrightness && BackgroundContrast == Other.BackgroundContrast
             && BackgroundAmbient == Other.BackgroundAmbient && AtmosphereColor == Other.AtmosphereColor
             && GameplayBrightness == Other.GameplayBrightness && GameplayContrast == Other.GameplayContrast && GameplayTint == Other.GameplayTint
-            && bDisableBackgroundAmbient == Other.bDisableBackgroundAmbient && bVisualizeMasks == Other.bVisualizeMasks;
+            && bDisableBackgroundAmbient == Other.bDisableBackgroundAmbient && bVisualizeMasks == Other.bVisualizeMasks
+            && bEnableDepthGrading == Other.bEnableDepthGrading && DepthStart == Other.DepthStart && DepthRange == Other.DepthRange
+            && DepthBrightness == Other.DepthBrightness && DepthContrast == Other.DepthContrast
+            && DepthDesaturation == Other.DepthDesaturation && DepthTintStrength == Other.DepthTintStrength
+            && DepthFog == Other.DepthFog && DepthTint == Other.DepthTint && bVisualizeDepthLayers == Other.bVisualizeDepthLayers;
     }
 };
 
@@ -485,6 +545,7 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StylizedDepthMaterial;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ActiveDepthMaterial;
     bool bTriedStylizedDepthAsset = false;
+    bool bHasDepthPrototypeAsset = false;
     bool bProfileUniformsInitialized = false;
     FPWGVisualProfile LastProfileUniforms;
     FVector LastProfileOrigin = FVector::ZeroVector;

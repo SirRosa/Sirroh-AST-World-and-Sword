@@ -23,6 +23,8 @@ struct FPWGv2DecorationBatch
     // Custom-depth-only geometry; original render sections and collision stay authoritative.
     UPROPERTY(Transient) TArray<TObjectPtr<UProceduralMeshComponent>> VisualMasks;
     bool bVisualMasksBuilt=false;
+    TMap<int32,int32> DepthPrototypePlans; // appended section -> near(0), mid(1), backing(2)
+    TSet<int32> DepthPrototypeReplacedSections;
     UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Actors;
 };
 
@@ -38,6 +40,8 @@ public:
     UPWGv2WorldSave* GetDebugWorld() const { return WorldData; }
     bool HasGlobalDepthAtmosphere() const;
     void SetVisualMaskPassEnabled(bool bEnabled);
+    void SetDepthPrototypePresentation(bool bEnabled,int32 FormationCount,bool bNear,bool bMid,bool bBacking);
+    bool IsDepthPrototypeActive() const { return bDepthPrototypeActive && BackgroundAuditIsolation==0; }
     // Reserved stencil roles for this pass, independent of physical lane.
     static constexpr int32 VisualRear=201;
     static constexpr int32 VisualCutaway=202;
@@ -169,6 +173,10 @@ private:
     void BuildVisualMasks(int32 Index);
     void SyncVisualMasks(int32 Index);
     bool bVisualMaskPassEnabled=false;
+    bool bDepthPrototypeActive=false;
+    int32 DepthPrototypeFormationCount=2;
+    bool bDepthPrototypeNear=true, bDepthPrototypeMid=true, bDepthPrototypeBacking=true;
+    bool IsDepthPrototypeSectionVisible(const FPWGv2DecorationBatch& Batch,int32 Section) const;
     int32 BackgroundAuditIsolation=0;
     float BackgroundAuditFirstShaftX=MAX_flt;
     float BackgroundAuditFirstRoomX=MAX_flt;

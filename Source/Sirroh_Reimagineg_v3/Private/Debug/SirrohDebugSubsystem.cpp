@@ -455,6 +455,10 @@ private:
             Group(TEXT("Powierzchnie rozgrywki"),{TEXT("GameplayBrightness"),TEXT("GameplayContrast"),TEXT("GameplayTint")});
             Group(TEXT("Przekroj"),{TEXT("ForegroundDarkness"),TEXT("ForegroundTint")});
             Group(TEXT("Atmosfera"),{TEXT("AtmosphereColor"),TEXT("FogStrength"),TEXT("BackRange")});
+            Group(TEXT("Procedural Depth Layers"),{TEXT("bEnableDepthGrading"),TEXT("DepthStart"),TEXT("DepthRange"),TEXT("DepthBrightness"),
+                TEXT("DepthContrast"),TEXT("DepthDesaturation"),TEXT("DepthTintStrength"),TEXT("DepthTint"),TEXT("DepthFog"),
+                TEXT("bEnableDepthLayers"),TEXT("DepthFormationCount"),TEXT("bShowDepthNear"),TEXT("bShowDepthMid"),TEXT("bShowDepthBacking"),TEXT("bVisualizeDepthLayers")});
+            Label(TEXT("Stage 1 A/B: wylacz Depth Grading i Depth Layers. Prototyp: stale odleglosci i gestosc, widocznosc LIVE."));
             Group(TEXT("Diagnostyka"),{TEXT("bVisualizeMasks")});
             Label(TEXT("NeutralPadding / FrontRange: pola zgodnosci, nieaktywne w shaderze semantycznym."));
         }
