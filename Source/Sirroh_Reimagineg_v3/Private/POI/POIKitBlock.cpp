@@ -82,11 +82,22 @@ void APOIKitBlock::RefreshBlock()
     const FVector ActorScale=GetActorScale3D().GetAbs();
     const bool WantGASP=Settings.Kind==EPOIKitKind::GASP || Settings.Kind==EPOIKitKind::Both;
     const bool WantAST=Settings.Kind==EPOIKitKind::AST || Settings.Kind==EPOIKitKind::Both;
-    GASP->SetChildActorClass(WantGASP?GASPClass.LoadSynchronous():nullptr);
-    AST->SetChildActorClass(WantAST?ASTClass.LoadSynchronous():nullptr);
-    ASTOpposite->SetChildActorClass(WantAST && Settings.bBothASTSides?ASTClass.LoadSynchronous():nullptr);
-    ASTFront->SetChildActorClass(WantAST?ASTClass.LoadSynchronous():nullptr);
-    ASTBack->SetChildActorClass(nullptr); // Rear edge is deliberately not climbable in the sidescroller.
+    // SetChildActorClass destroys/recreates even an unchanged class in UE 5.8.
+    // Loaded POI levels already own their adapters; BeginPlay must retain them.
+    auto EnsureAdapter=[](UChildActorComponent* Component,UClass* Desired)
+    {
+        if(Component->GetChildActorClass()!=Desired)
+            Component->SetChildActorClass(Desired);
+        else if(Desired && !Component->GetChildActor())
+            Component->CreateChildActor();
+    };
+    UClass* GASPType=WantGASP?GASPClass.LoadSynchronous():nullptr;
+    UClass* ASTType=WantAST?ASTClass.LoadSynchronous():nullptr;
+    EnsureAdapter(GASP,GASPType);
+    EnsureAdapter(AST,ASTType);
+    EnsureAdapter(ASTOpposite,Settings.bBothASTSides?ASTType:nullptr);
+    EnsureAdapter(ASTFront,ASTType);
+    EnsureAdapter(ASTBack,nullptr); // Rear edge is deliberately not climbable.
     // Verified source SM_Cube bounds: (0,0,0)..(100,100,100), bottom CORNER origin.
     GASP->SetRelativeTransform(FTransform(FRotator::ZeroRotator,FVector(-Size.X*.5,-Size.Y*.5,-Size.Z),Size/100));
     for (auto* Adapter:{AST.Get(),ASTOpposite.Get(),ASTFront.Get(),ASTBack.Get()})
