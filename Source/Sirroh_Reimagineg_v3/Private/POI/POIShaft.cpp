@@ -108,11 +108,11 @@ void APOIShaft::RefreshLayerRenderVisibility()
     for (ULevelStreamingDynamic* Stream:GeneratedLevels) if (Stream && Stream->GetLoadedLevel())
         for (AActor* Actor:Stream->GetLoadedLevel()->Actors) HideLayerActor(Actor);
 }
-void APOIShaft::SetLayerRenderHidden(bool bHidden)
+void APOIShaft::SetLayerRenderHidden(bool bHideLayer)
 {
-    if (bLayerRenderHidden==bHidden) return;
-    bLayerRenderHidden=bHidden;
-    if (bHidden) RefreshLayerRenderVisibility();
+    if (bLayerRenderHidden==bHideLayer) return;
+    bLayerRenderHidden=bHideLayer;
+    if (bHideLayer) RefreshLayerRenderVisibility();
     else
     {
         for (const auto& Key:LayerHiddenActors)
