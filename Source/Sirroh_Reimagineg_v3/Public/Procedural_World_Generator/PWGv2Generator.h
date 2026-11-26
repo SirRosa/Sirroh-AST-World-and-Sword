@@ -39,7 +39,8 @@ public:
     bool HasGlobalDepthAtmosphere() const;
     void SetVisualMaskPassEnabled(bool bEnabled);
     // Reserved stencil roles for this pass, independent of physical lane.
-    static constexpr int32 VisualRear=201, VisualCutaway=202;
+    static constexpr int32 VisualRear=201;
+    static constexpr int32 VisualCutaway=202;
     static int32 VisualRoleForSection(int32 Section);
     bool IsDebugSession() const { return DebugOriginalWorld != nullptr; }
     UPWGv2WorldSave* GetDebugEditWorld() const { return DebugWorkingWorld; }

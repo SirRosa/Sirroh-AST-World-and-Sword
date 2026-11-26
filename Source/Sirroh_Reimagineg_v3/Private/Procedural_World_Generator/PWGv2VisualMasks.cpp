@@ -26,13 +26,13 @@ void APWGv2Generator::BuildVisualMasks(int32 Index)
     auto* Source=UndergroundChunks.FindRef(Index).Get();
     if (!Batch || !Source || Batch->bVisualMasksBuilt) return;
     Batch->bVisualMasksBuilt=true;
-    for (int32 Role:{VisualRear,VisualCutaway})
+    for (int32 StencilRole:{VisualRear,VisualCutaway})
     {
         UProceduralMeshComponent* Proxy=nullptr;
         for (int32 S=0;S<Source->GetNumSections();++S)
         {
             const FProcMeshSection* Part=Source->GetProcMeshSection(S);
-            if (VisualRoleForSection(S)!=Role || !Part || Part->ProcIndexBuffer.IsEmpty()) continue;
+            if (VisualRoleForSection(S)!=StencilRole || !Part || Part->ProcIndexBuffer.IsEmpty()) continue;
             if (!Proxy)
             {
                 Proxy=NewObject<UProceduralMeshComponent>(this);
@@ -44,7 +44,7 @@ void APWGv2Generator::BuildVisualMasks(int32 Index)
                 Proxy->SetRenderInMainPass(false);
                 Proxy->SetRenderInDepthPass(false);
                 Proxy->SetRenderCustomDepth(true);
-                Proxy->SetCustomDepthStencilValue(Role);
+                Proxy->SetCustomDepthStencilValue(StencilRole);
                 Proxy->SetVisibility(false);
                 Proxy->bUseComplexAsSimpleCollision=false;
                 Proxy->ComponentTags.Add(TEXT("PWGVisualMask"));
