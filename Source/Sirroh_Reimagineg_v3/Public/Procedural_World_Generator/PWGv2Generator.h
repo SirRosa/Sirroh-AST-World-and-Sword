@@ -187,6 +187,7 @@ private:
     float CaveReferenceStart=0.f, CaveReferenceDepth=0.f;
     bool bCaveReferencePinned=false, bCaveReferenceActive=false;
     float CaveReferenceTextures[4]={-1.f,-1.f,-1.f,-1.f};
+    float CaveReferenceFlatAlbedo=-1.f;
     UMaterialInstanceDynamic* CreateCaveReferenceMaterial(int32 Layer);
     bool BuildCaveReference(const FVector& Pawn,float Depth);
     bool SuppressCaveReferenceOriginal(const FPWGv2DecorationBatch& Batch,int32 Section) const;
