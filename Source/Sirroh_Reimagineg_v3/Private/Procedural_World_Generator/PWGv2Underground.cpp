@@ -468,9 +468,115 @@ void APWGv2Generator::BuildUnderground(int32 Index,float Start,float End,bool As
             continue;
         }
     }
+    // Bake ambient falloff into the foreground mask only. Measure distance in X/Z
+    // to the nearest actual room or shaft opening, not the current player or camera.
+    constexpr float ShadeRange=600.f, ShadeStep=100.f;
+    constexpr float EdgeShade=0.65f*0.85f; // 15% darker than the previous mask baseline.
+    constexpr float DeepShade=0.35f; // relative to the edge, reached after six metres.
+    const float ShadeStart=FMath::Max(WorldData->Regions[0].StartX,Start-ShadeRange-ShadeStep);
+    const float ShadeEnd=FMath::Min(WorldData->Regions.Last().EndX,End+ShadeRange+ShadeStep);
+    TArray<float> ShadeSamples=Samples;
+    ShadeSamples.AddUnique(ShadeStart); ShadeSamples.AddUnique(ShadeEnd);
+    // A world-aligned halo ensures shaft proximity is accounted for across chunk seams.
+    for (float X=FMath::CeilToFloat(ShadeStart/ShadeStep)*ShadeStep;X<ShadeEnd;X+=ShadeStep) ShadeSamples.AddUnique(X);
+    for (float X=WorldData->MinX+(FMath::FloorToInt((ShadeStart-WorldData->MinX)/Settings.SampleSpacing)+1)*Settings.SampleSpacing;X<ShadeEnd;X+=Settings.SampleSpacing) ShadeSamples.AddUnique(X);
+    for (const auto& P:WorldData->Portals)
+        for (float X:{P.X-P.Width*.5f,P.X+P.Width*.5f}) if (X>ShadeStart && X<ShadeEnd) ShadeSamples.AddUnique(X);
+    for (const auto& R:WorldData->Regions)
+        for (float X:{R.StartX,R.EndX}) if (X>ShadeStart && X<ShadeEnd) ShadeSamples.AddUnique(X);
+    for (int32 P=0;P<WorldData->AuthoredPOIs.Num();++P)
+        if (WorldData->AuthoredPOIPositions.IsValidIndex(P))
+            for (float X:{WorldData->AuthoredPOIPositions[P].X-WorldData->AuthoredPOIs[P].Width*.5f,WorldData->AuthoredPOIPositions[P].X+WorldData->AuthoredPOIs[P].Width*.5f})
+                if (X>ShadeStart && X<ShadeEnd) ShadeSamples.AddUnique(X);
+    ShadeSamples.Sort();
+    struct FShadeColumn { float Floor[5],Roof[5]; };
+    TArray<FShadeColumn> Columns; Columns.SetNum(ShadeSamples.Num());
+    for (int32 I=0;I<ShadeSamples.Num();++I)
+    {
+        auto& C=Columns[I]; C.Floor[0]=Height(ShadeSamples[I]); C.Roof[0]=C.Floor[0];
+        for (int32 L=1;L<=4;++L) { C.Floor[L]=LayerFloor(L,ShadeSamples[I]); C.Roof[L]=LayerCeiling(L,ShadeSamples[I]); }
+    }
+    struct FShadeEdge { FVector2D A,B; };
+    TArray<FShadeEdge> Edges;
+    auto AddEdge=[&](float X0,float Z0,float X1,float Z1){ Edges.Add({FVector2D(X0,Z0),FVector2D(X1,Z1)}); };
+    for (int32 I=0;I+1<ShadeSamples.Num();++I)
+    {
+        const float A=ShadeSamples[I],B=ShadeSamples[I+1],Mid=(A+B)*.5f;
+        const auto& C0=Columns[I]; const auto& C1=Columns[I+1];
+        for (int32 L=1;L<=4;++L)
+        {
+            if (L==1 && RegionAt(Mid).Definition.EntranceStyle==EPWGv2EntranceStyle::None) continue;
+            AddEdge(A,C0.Floor[L],B,C1.Floor[L]); AddEdge(A,C0.Roof[L],B,C1.Roof[L]);
+            // Close exposed room ends only; never create a fake bright line at chunk borders.
+            if (FMath::IsNearlyEqual(A,WorldData->Regions[0].StartX) || (L==1 && RegionAt(A-1).Definition.EntranceStyle==EPWGv2EntranceStyle::None)) AddEdge(A,C0.Floor[L],A,C0.Roof[L]);
+            if (FMath::IsNearlyEqual(B,WorldData->Regions.Last().EndX) || (L==1 && RegionAt(B+1).Definition.EntranceStyle==EPWGv2EntranceStyle::None)) AddEdge(B,C1.Floor[L],B,C1.Roof[L]);
+        }
+        for (const auto& P:WorldData->Portals)
+        {
+            if (P.UpperLayer<0 || P.LowerLayer>4 || P.UpperLayer>=P.LowerLayer || FMath::Abs(Mid-P.X)>=P.Width*.5f) continue;
+            const int32 L=P.LowerLayer,U=P.UpperLayer;
+            AddEdge(A,C0.Floor[L],B,C1.Floor[L]); AddEdge(A,C0.Floor[U],B,C1.Floor[U]);
+            if (FMath::IsNearlyEqual(A,P.X-P.Width*.5f,.01f)) AddEdge(A,C0.Floor[L],A,C0.Floor[U]);
+            if (FMath::IsNearlyEqual(B,P.X+P.Width*.5f,.01f)) AddEdge(B,C1.Floor[L],B,C1.Floor[U]);
+        }
+    }
+    TMap<float,TArray<int32>> NearbyEdges;
+    TMap<FVector2D,float> ShadeCache;
+    auto ShadeAt=[&](const FVector& V)
+    {
+        const FVector2D Point(V.X,V.Z);
+        if (const auto* Found=ShadeCache.Find(Point)) return *Found;
+        const float X=V.X;
+        auto* Nearby=NearbyEdges.Find(X);
+        if (!Nearby)
+        {
+            Nearby=&NearbyEdges.Add(X);
+            for (int32 E=0;E<Edges.Num();++E)
+                if (FMath::Min(Edges[E].A.X,Edges[E].B.X)<=X+ShadeRange && FMath::Max(Edges[E].A.X,Edges[E].B.X)>=X-ShadeRange) Nearby->Add(E);
+        }
+        double D2=ShadeRange*ShadeRange;
+        for (int32 E:*Nearby)
+        {
+            const auto& Edge=Edges[E];
+            if (FMath::Min(Edge.A.Y,Edge.B.Y)>Point.Y+ShadeRange || FMath::Max(Edge.A.Y,Edge.B.Y)<Point.Y-ShadeRange) continue;
+            const FVector2D AB=Edge.B-Edge.A;
+            const double T=FMath::Clamp(FVector2D::DotProduct(Point-Edge.A,AB)/FMath::Max(AB.SizeSquared(),1.e-8),0.0,1.0);
+            D2=FMath::Min(D2,(Point-(Edge.A+AB*T)).SizeSquared());
+            if (D2<1.e-6) break;
+        }
+        const float Shade=EdgeShade*FMath::Lerp(1.f,DeepShade,FMath::SmoothStep(0.f,ShadeRange,float(FMath::Sqrt(D2))));
+        ShadeCache.Add(Point,Shade); return Shade;
+    };
     for (int32 Layer=1;Layer<=4;++Layer)
     {
         auto& Mask=SolidCutaway[Layer-1];
+        if (!Mask.V.IsEmpty())
+        {
+            FPWGv2MeshBuffers Shaded;
+            for (int32 I=0;I+3<Mask.V.Num();I+=4)
+            {
+                const FVector A=Mask.V[I],B=Mask.V[I+1],C=Mask.V[I+2],D=Mask.V[I+3];
+                const double H=FMath::Max(D.Z-A.Z,C.Z-B.Z);
+                if (H<=KINDA_SMALL_NUMBER) continue;
+                TArray<double,TInlineAllocator<16>> Stops={0.0,1.0};
+                // Refine both exposed edges; the huge deep backing stays a single strip.
+                for (double Offset=ShadeStep;Offset<=ShadeRange && Offset<H;Offset+=ShadeStep)
+                { Stops.AddUnique(Offset/H); Stops.AddUnique(1.0-Offset/H); }
+                Stops.Sort();
+                for (int32 J=1;J<Stops.Num();++J)
+                {
+                    if (Stops[J]-Stops[J-1]<1.e-8) continue;
+                    const FVector P[]={FMath::Lerp(A,D,Stops[J-1]),FMath::Lerp(B,C,Stops[J-1]),FMath::Lerp(B,C,Stops[J]),FMath::Lerp(A,D,Stops[J])};
+                    Shaded.Quad(P[0],P[1],P[2],P[3],FLinearColor::White);
+                    for (int32 K=0;K<4;++K)
+                    {
+                        const float S=ShadeAt(P[K]);
+                        Shaded.C[Shaded.C.Num()-4+K]=FLinearColor(S,S,S,0.f);
+                    }
+                }
+            }
+            Mask=MoveTemp(Shaded);
+        }
         if (Mask.V.IsEmpty()) continue;
         if (const auto* Row=TerrainTexturesTable?TerrainTexturesTable->FindRow<FPWGv2TerrainTextureRow>(WorldData->Layers[Layer-1].WallTexture,TEXT("Solid cutaway scale"),false):nullptr)
             for (auto& UV:Mask.UV) UV*=100.f/FMath::Max(25.f,Row->TilingWorldSize);

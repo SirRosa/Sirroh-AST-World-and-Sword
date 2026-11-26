@@ -117,6 +117,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
             }
             // Check actual foreground geometry, not merely component visibility.
             int32 MaskQuads=0,OpenSamples=0,ShaftSamples=0,SolidSamples=0;
+            int32 ShadeMin=255,ShadeMax=0;
             for (const auto& Pair:G->UndergroundChunks)
             {
                 auto* Mesh=Pair.Value.Get(); if (!Mesh) continue;
@@ -128,6 +129,11 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     if (!Part || Part->ProcVertexBuffer.IsEmpty()) continue;
                     TestFalse(TEXT("Solid cutaway has no section collision"),Part->bEnableCollision);
                     TestTrue(TEXT("Solid cutaway uses layer wall material"),Mesh->GetMaterial(S)==G->WallMaterial(L));
+                    for (const auto& V:Part->ProcVertexBuffer)
+                    {
+                        ShadeMin=FMath::Min(ShadeMin,int32(V.Color.R)); ShadeMax=FMath::Max(ShadeMax,int32(V.Color.R));
+                        TestTrue(TEXT("Cutaway shading is neutral"),V.Color.R==V.Color.G && V.Color.G==V.Color.B);
+                    }
                     for (int32 V=0;V+3<Part->ProcVertexBuffer.Num();V+=4)
                     {
                         const auto& A=Part->ProcVertexBuffer[V].Position;
@@ -185,6 +191,11 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                 }
             }
             TestTrue(TEXT("Audit contains actual cutaway quads and rooms"),MaskQuads>0 && OpenSamples>0 && SolidSamples>0);
+            // Accept either linear or sRGB vertex conversion; verify genuine gradient and darker baseline.
+            const FLinearColor Edge(.65f*.85f,.65f*.85f,.65f*.85f);
+            TestTrue(TEXT("Mask has distance shading"),ShadeMax-ShadeMin>30 && ShadeMin>0);
+            TestTrue(TEXT("Mask edge is approximately 15 percent darker than prior mask"),FMath::Abs(ShadeMax-int32(Edge.ToFColor(false).R))<=2 || FMath::Abs(ShadeMax-int32(Edge.ToFColor(true).R))<=2);
+            AddInfo(FString::Printf(TEXT("SOLID_SHADE vertex_min=%d vertex_max=%d"),ShadeMin,ShadeMax));
             AddInfo(FString::Printf(TEXT("SOLID_CUTAWAY quads=%d room_samples=%d shaft_samples=%d solid_samples=%d"),MaskQuads,OpenSamples,ShaftSamples,SolidSamples));
             // Exercise both domain changes and the no-frustum (debug/perspective) path.
             auto CheckVisibility=[&](bool bUnderground)
