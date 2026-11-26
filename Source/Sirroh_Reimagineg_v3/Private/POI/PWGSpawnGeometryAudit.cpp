@@ -149,7 +149,8 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                             const auto& C=Part->ProcVertexBuffer[V+2].Position; const auto& E=Part->ProcVertexBuffer[V+3].Position;
                             if (X<=A.X || X>=B.X) continue;
                             const float T=(X-A.X)/(B.X-A.X);
-                            if (Z>FMath::Lerp(A.Z,B.Z,T)+1 && Z<FMath::Lerp(E.Z,C.Z,T)-1) return true;
+                            // Shared material seams are covered by the adjoining quads as well.
+                            if (Z>=FMath::Lerp(A.Z,B.Z,T)-.01 && Z<=FMath::Lerp(E.Z,C.Z,T)+.01) return true;
                         }
                     }
                     return false;
