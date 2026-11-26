@@ -88,6 +88,8 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                         if (Excess>50) ++Above;
                         if (Excess>MaxExcess) { MaxExcess=Excess; Worst=P; }
                     }
+                    if (N>0 && (S==1 || S==17))
+                        TestTrue(FString::Printf(TEXT("First-layer floor/roof and near shell do not protrude (section %d)"),S),Above==0);
                     if (N>0 && Above>0)
                         AddInfo(FString::Printf(TEXT("SPAWN_OVERGROUND section=%d above=%d/%d max=%.1f x=%.1f y=%.1f z=%.1f"),S,Above,N,MaxExcess,Worst.X,Worst.Y,Worst.Z));
                 }
