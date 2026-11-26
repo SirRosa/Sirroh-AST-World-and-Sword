@@ -54,7 +54,7 @@ try {
  $s2=(Join-Path $stage 'Source/Tools/create_pwg_pixel_depth_pp.py').Replace('\','/')
  @("import runpy","runpy.run_path(r'$s1',run_name='__main__')","runpy.run_path(r'$s2',run_name='__main__')")|Set-Content -Encoding UTF8 $author
  $editor=Join-Path $e 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
- $rc=Native $editor @($u,'-run=pythonscript',"-script=$author",'-unattended','-nop4','-AllowCommandletRendering','-nosplash','-stdout','-FullStdOutLogOutput') (Join-Path $d 'author.log')
+ $rc=Native $editor @($u,'-run=pythonscript',("-script="+$author.Replace('\','/')),'-unattended','-nop4','-AllowCommandletRendering','-nosplash','-stdout','-FullStdOutLogOutput') (Join-Path $d 'author.log')
  Note "AUTHOR_EXIT=$rc"
  $al=Get-Content (Join-Path $d 'author.log') -Raw
  if($rc -ne 0 -or $al -notmatch 'PIXEL_BACKGROUND_SAVED' -or $al -notmatch 'PIXEL_DEPTH_PP_SAVED' -or $al -match 'Traceback \(most recent call last\)|Failed to compile Material.*Pixel'){throw 'Material authoring not verified; see author.log'}
