@@ -289,7 +289,7 @@ void APWGv2Generator::LogPixelVisibilityAudit(const FVector& Focus) const
             const auto* Part=Mesh->GetProcMeshSection(Tile.Section);
             if(!Part || Part->ProcVertexBuffer.IsEmpty())continue;
             const auto* Mat=Mesh->GetMaterial(Tile.Section);
-            UTexture* Tex=nullptr;FLinearColor Scale,Offset;
+            UTexture* Tex=nullptr;FLinearColor Scale=FLinearColor::Black,Offset=FLinearColor::Black;
             const bool bParams=Mat && Mat->GetTextureParameterValue(FMaterialParameterInfo(FName(TEXT("PixelData"))),Tex)
                 && Mat->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataScale"))),Scale)
                 && Mat->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataOffset"))),Offset);
