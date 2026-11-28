@@ -12,7 +12,7 @@ function Note($s){$s|Tee-Object -FilePath $result -Append}
 function Hash($f){(& git hash-object --no-filters $f).Trim()}
 function Native($exe,$a,$log){& $exe @a *> $log;return $LASTEXITCODE}
 function NoEditor {if(Get-Process UnrealEditor,UnrealEditor-Cmd,AST_V1_18 -ErrorAction SilentlyContinue){throw 'Editor/game running; deployment stopped'}}
-$commit='3cfd70a7ff42a0ec2ae04bc549d04c3c914b5a61'
+$commit='830cfc64dea803aae6c06a05de326545e4f0fc4a'
 $files=@(
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Debug/SirrohDebugSubsystem.cpp';Old='cfca55aba56ae834f89203f67043ae1e2c67b75a';New='ecc54946b887acfed5118377cb7992379eb286bb'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/POI/PWGSpawnGeometryAudit.cpp';Old='b3391105907d36c361537e7aeed6f701051ba126';New='24aa2de83edd0255b33123174de8f2731e7c864f'},
@@ -21,7 +21,7 @@ $files=@(
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2PixelField.h';Old='2bf7e842d514a2b2943a98fd70a12cf11d647143';New='a69e30c63e7d9beecfdba66d5992dba2975164d3'},
 @{Path='Source/Sirroh_Reimagineg_v3/Private/Procedural_World_Generator/PWGv2PixelFieldTests.cpp';Old='9c6befa152e9955f29b66a692e043cb73042cd34';New='b16594a00e40705e3b6e7043c13014c668e4ddee'},
 @{Path='Source/Sirroh_Reimagineg_v3/Public/PWG/PWGEnvironmentV2.h';Old='641b2b9a06e2e39602a003435c9a5d45d323fe0a';New='4d24a7b8727b759f639fe49d122079155dc5f626'},
-@{Path='Source/Sirroh_Reimagineg_v3/Public/Procedural_World_Generator/PWGv2Generator.h';Old='5e9109d5457761c6e0624581a465740f97ecfc25';New='042aea601bfe6ef6ace89069c7c0ddae920ec3e5'},
+@{Path='Source/Sirroh_Reimagineg_v3/Public/Procedural_World_Generator/PWGv2Generator.h';Old='e55ca9e8b110a50d2d3a7f795c25c7105b2f8713';New='bf0dabbbaaaaf14ad8799a27e4c094d490fc0b6d'},
 @{Path='Source/Tools/create_pwg_pixel_readability.py';Old='';New='4dd57b20df741ea5f1b593c8d31784f78aa280cd'}
 )
 try {
