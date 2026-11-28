@@ -167,7 +167,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelReadabilityQA?TEXT("ChatGPT/PixelReadability_20261128/Render"):bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelReadabilityQA?TEXT("ChatGPT/PixelReadability_20261128/RenderVerified"):bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -339,18 +339,28 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         }
         case 13: if(!Capture(TEXT("TorchDark")))return;if(bPixelQA){Advance(70);return;}break;
         case 70: NextScene();return;
+        // FScreenshotRequest is consumed at end of frame. Never alter the
+        // profile in the same frame as the request; capture and switch in
+        // distinct settled steps.
         case 80:
             if(!Capture(TEXT("Before")))return;
+            Advance(84);return;
+        case 84:
             VisualProfile.bPixelReadability=true;RefreshVisualProfile();Advance(81);return;
         case 81:
             if(!Capture(TEXT("After")))return;
-            if(VisualProbeScene!=0){Advance(70);return;}
+            Advance(VisualProbeScene==0?85:70);return;
+        case 85:
             VisualProfile.bPixelRawPalette=true;RefreshVisualProfile();Advance(82);return;
         case 82:
             if(!Capture(TEXT("RawPalette")))return;
+            Advance(86);return;
+        case 86:
             VisualProfile.bPixelRawPalette=false;VisualProfile.bVisualizeDepthLayers=true;RefreshVisualProfile();Advance(83);return;
         case 83:
             if(!Capture(TEXT("Plans")))return;
+            Advance(87);return;
+        case 87:
             SetPreset(0);Advance(8);return;
         // Exact same camera/seed/masks for raw, ambient sweep and dark/torch.
         case 71:
