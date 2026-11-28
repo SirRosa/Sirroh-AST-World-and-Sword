@@ -46,7 +46,7 @@ try {
  $protected=@{}
  Get-ChildItem (Join-Path $p 'Saved\SaveGames') -File -Filter '*.sav'|ForEach-Object {$protected[$_.FullName]=(Get-FileHash $_.FullName).Hash}
  Get-ChildItem (Join-Path $p 'Content') -Recurse -File -Filter 'M_PWGv2*.uasset'|ForEach-Object {$protected[$_.FullName]=(Get-FileHash $_.FullName).Hash}
- $copySource=Join-Path $p 'Saved\SaveGames\PWGv2_VF_POIProbe_20261126.sav'
+ $copySource=Join-Path $p 'Saved\SaveGames\PWGv2_Serrania.sav'
  $copyDest=Join-Path $p 'Saved\SaveGames\PWGv2_VF_PixelReadability_20261128.sav'
  if(!(Test-Path $copySource)){throw 'QA source slot missing'}
  if(Test-Path $copyDest){throw 'QA destination exists; preserve for inspection'}
