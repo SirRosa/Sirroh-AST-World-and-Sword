@@ -113,8 +113,12 @@ void APWGv2Generator::BuildPixelBackground(int32 Index,float Start,float End,UPr
             FPWGv2MeshBuffers Card;
             Card.Quad(FVector(Start,Y,Range.X),FVector(End,Y,Range.X),FVector(End,Y,Range.Y),FVector(Start,Y,Range.Y),FLinearColor::White);
             Card.UV={FVector2D(0,0),FVector2D(1,0),FVector2D(1,1),FVector2D(0,1)};
+            // UE front faces use clockwise winding. Quad's mathematical -Y
+            // normal was flipped by TwoSidedSign in the visible back face.
+            // Keep the vertex normals, positions, UVs and mask lattice exactly.
+            for(int32 I=0;I+2<Card.T.Num();I+=3)Swap(Card.T[I+1],Card.T[I+2]);
             Card.Submit(Mesh,Section);
-            auto* MID=UMaterialInstanceDynamic::Create(bPixelRawPalette && IsValid(PixelRawMaterial)?PixelRawMaterial.Get():PixelBackgroundMaterial.Get(),this);
+            auto* MID=UMaterialInstanceDynamic::Create(PixelBackgroundMaterial,this);
             Mesh->SetMaterial(Section,MID);
             Mesh->SetMeshSectionVisible(Section,false);
             FPWGPixelTile Tile;Tile.Section=Section;Tile.Plan=P;
@@ -238,7 +242,7 @@ void APWGv2Generator::UpdatePixelMaterialParameters(int32 Index,UProceduralMeshC
 void APWGv2Generator::SetPixelBackgroundPresentation(const FPWGVisualProfile& P,bool bEnabled)
 {
     bEnabled=bEnabled && EnsurePixelBackgroundMaterial();
-    const bool bRaw=P.bPixelRawPalette && EnsurePixelRawMaterial();
+    const bool bRaw=P.bPixelRawPalette; // deferred BaseColor preview, no material swaps
     const bool bRawChanged=bRaw!=bPixelRawPalette;
     const bool bRepaint=PixelCellCm!=P.PixelCellCm || PixelStructureScale!=P.PixelStructureScale ||
         PixelDensity!=P.PixelDensity || PixelRoughness!=P.PixelRoughness || PixelErosion!=P.PixelErosion || PixelDetail!=P.PixelDetail;
@@ -259,7 +263,7 @@ void APWGv2Generator::SetPixelBackgroundPresentation(const FPWGVisualProfile& P,
             Batch->bPixelReady=RepaintPixelBackground(Pair.Key,Mesh);
             if(!Batch->bPixelReady)UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D: repaint failed chunk %d; Stage 1 retained"),Pair.Key);
         }
-        if(bRawChanged)ApplyPixelMaterialMode(Pair.Key,Mesh);
+        // Raw Palette reads the lit material's actual GBuffer BaseColor after tone mapping.
         if(bPalette || bRepaint)UpdatePixelMaterialParameters(Pair.Key,Mesh);
         if(bVisibility || bRepaint)ApplyChunkLayerVisibility(Pair.Key);
     }

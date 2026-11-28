@@ -1033,7 +1033,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     {
         bTriedStylizedDepthAsset=true;
         if (UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,
-            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_Pixel2D.M_PWGv2_DepthAtmosphere_Pixel2D")))
+            TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_DepthAtmosphere_PixelVisibility.M_PWGv2_DepthAtmosphere_PixelVisibility")))
         {
             StylizedDepthMaterial=UMaterialInstanceDynamic::Create(Parent,this);
             bHasPixelBackgroundAsset=IsValid(StylizedDepthMaterial);
@@ -1091,15 +1091,14 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     // scene depth, and lock exposure without camera aperture/shutter/ISO.
     // On leaving Raw, restore the normal camera/volume exposure route.
     auto& RawExposure=DepthPostProcess->Settings;
-    bool bManualExposure=bRawPalette;
+    bool bManualExposure=false;
 #if !UE_BUILD_SHIPPING
     bManualExposure|=bPixelActive && bPixelVisibilityManualExposure;
 #endif
     RawExposure.bOverride_AutoExposureMethod=bManualExposure;
     RawExposure.bOverride_AutoExposureBias=bManualExposure;
     RawExposure.bOverride_AutoExposureApplyPhysicalCameraExposure=bManualExposure;
-    RawExposure.bOverride_ToneCurveAmount=bRawPalette;
-    if(bRawPalette)RawExposure.ToneCurveAmount=0.f;
+    RawExposure.bOverride_ToneCurveAmount=false;
     if(bManualExposure)
     {
         RawExposure.AutoExposureMethod=AEM_Manual;
@@ -1236,6 +1235,7 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
         }
         if (bHasPixelBackgroundAsset)
         {
+            Scalar(TEXT("RawPalette"),bRawPalette?1.f:0.f);
             Scalar(TEXT("ProfileStrength"),bRawPalette?0.f:(Profile.CaveMaterialDebug>0 && Profile.bCaveReference?0.f:Profile.Strength));
             Scalar(TEXT("ProfileVisualizeMasks"),!bRawPalette && Profile.bVisualizeMasks?1.f:0.f);
             Scalar(TEXT("DepthLayerDebug"),!bRawPalette && Profile.bVisualizeDepthLayers && !Profile.bCompareStage1?1.f:0.f);
