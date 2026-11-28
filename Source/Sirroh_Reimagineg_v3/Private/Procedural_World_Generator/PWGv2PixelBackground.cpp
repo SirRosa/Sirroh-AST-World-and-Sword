@@ -271,7 +271,7 @@ void APWGv2Generator::LogPixelVisibilityAudit(const FVector& Focus) const
     const FVector Local=GetActorTransform().InverseTransformPosition(Focus);
     for(const auto& Pair:UndergroundChunks)
     {
-        const auto* Mesh=Pair.Value.Get(); const auto* Batch=DecorationChunks.Find(Pair.Key);
+        auto* Mesh=Pair.Value.Get(); const auto* Batch=DecorationChunks.Find(Pair.Key);
         if(!Mesh || !Batch || Batch->PixelTiles.IsEmpty())continue;
         const auto& Rect=Batch->PixelTiles[0].Bounds;
         if(Local.X<Rect.Min.X-800 || Local.X>Rect.Max.X+800)continue;
