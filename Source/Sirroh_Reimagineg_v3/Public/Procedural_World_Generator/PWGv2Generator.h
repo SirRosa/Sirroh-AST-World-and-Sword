@@ -3,6 +3,7 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
 #include "Procedural_World_Generator/PWGv2Data.h"
+#include "Procedural_World_Generator/PWGLivingEnvTypes.h"
 #include "PWGv2Generator.generated.h"
 
 class UHierarchicalInstancedStaticMeshComponent;
@@ -29,6 +30,11 @@ struct FPWGv2DecorationBatch
     TArray<UHierarchicalInstancedStaticMeshComponent*> GrassGroups; // Owned by Components.
     FBox GrassBounds = FBox(ForceInit);
     bool bGrassVisible = true;
+    TArray<UHierarchicalInstancedStaticMeshComponent*> UndergroundGrassGroups; // Owned by Components.
+    FBox UndergroundGrassBounds = FBox(ForceInit);
+    bool bUndergroundGrassVisible = false;
+    TArray<int32> GrassSimHandles;
+    TArray<int32> LivingEnvSimHandles;
     TArray<TWeakObjectPtr<class APWGProceduralTree>> Trees;
     TArray<FBox> UndergroundSectionBounds;
     // Custom-depth-only geometry; original render sections and collision stay authoritative.
@@ -141,6 +147,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2") TObjectPtr<UDataTable> TreesTable;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2") TObjectPtr<UDataTable> UndergroundTable;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2") TObjectPtr<UDataTable> TerrainTexturesTable;
+    /** Procedural interactive grass configuration (Rain World style, depth-scaled). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2|Grass") FPWGv2GrassSettings GrassSettings;
+    UFUNCTION(BlueprintCallable, Category="PWG v2|Grass") void RefreshProceduralGrassMaterials();
+    /** Procedural living underground environment configuration (8 Rain World systems). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PWG v2|Living Environment") FPWGv2LivingEnvSettings LivingEnvSettings;
+    UFUNCTION(BlueprintCallable, Category="PWG v2|Living Environment") void RefreshLivingEnvMaterials();
 protected:
     virtual void Tick(float DeltaSeconds) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -169,6 +181,9 @@ private:
     UPROPERTY(Transient) TMap<int32, FPWGv2DecorationBatch> DecorationChunks;
     TArray<TWeakObjectPtr<UPrimitiveComponent>> TraversalVisuals;
     UPROPERTY(Transient) TMap<FString,TObjectPtr<UMaterialInstanceDynamic>> AtlasMaterials;
+    UPROPERTY(Transient) TMap<int32,TObjectPtr<UMaterialInstanceDynamic>> ProceduralGrassMaterials;
+    UPROPERTY(Transient) TMap<FName,TObjectPtr<UMaterialInstanceDynamic>> SurfaceBiomeGrassMaterials;
+    UPROPERTY(Transient) TMap<FName,TObjectPtr<UMaterialInstanceDynamic>> LivingEnvMaterials;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ForegroundMaterial;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> CardMesh;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> RockMesh;
@@ -188,6 +203,13 @@ private:
     UMaterialInstanceDynamic* AtlasMaterial(const FPWGv2AtlasPart& Part, FLinearColor Tint, bool Tiled=false, bool TreeLighting=false, bool LitBackground=false);
     UMaterialInstanceDynamic* WallMaterial(int32 Layer,bool Cover=false,bool Entrance=false,bool SolidCutaway=false,bool LitBackground=false);
     void BuildDecorationsV2(int32 Index, float Start, float End);
+    void BuildProceduralGrassForChunk(int32 Index, float Start, float End);
+    void UnregisterChunkGrass(FPWGv2DecorationBatch& Batch);
+    void BuildLivingEnvironmentForChunk(int32 Index, float Start, float End);
+    void UnregisterChunkLivingEnv(FPWGv2DecorationBatch& Batch);
+    FPWGGrassPalette ResolveSurfaceBiomePalette(int32 BiomeIndex) const;
+    const FPWGGrassBiomeOverride& ResolveSurfaceBiomeGrassOverride(int32 BiomeIndex) const;
+    float ComputeUndergroundPOIFalloff(int32 Layer, float X, float Y) const;
     void PlanAuthoredPOIs();
     void PlanRoomChains(const TArray<FPOIShaftRow>& Pool, int32 Layer);
     bool IsRoomChain(int32 Layer, float X, float Margin=0) const;
