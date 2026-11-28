@@ -17,10 +17,10 @@ raw=unreal.load_asset(dst) if ea.does_asset_exist(dst) else None
 if not raw:
     raw=ea.duplicate_asset(src,dst)
     assert raw
-    raw.set_editor_property('shading_model',unreal.MaterialShadingModel.MSM_UNLIT)
     color=me.get_material_property_input_node(raw,mp.MP_BASE_COLOR)
     assert isinstance(color,unreal.MaterialExpressionCustom)
     assert color.get_editor_property('code')==original_color.get_editor_property('code')
+    raw.set_editor_property('shading_model',unreal.MaterialShadingModel.MSM_UNLIT)
     assert me.connect_material_property(color,'',mp.MP_EMISSIVE_COLOR)
     me.recompile_material(raw)
     assert ea.save_loaded_asset(raw,only_if_is_dirty=False)

@@ -50,6 +50,14 @@ bool FPWGVisualProfileTest::RunTest(const FString&)
     const auto Atmospheric=FPWGVisualProfile::DemoPreset(1).Sanitized();
     const auto Warm=FPWGVisualProfile::DemoPreset(2).Sanitized();
     TestTrue(TEXT("Dark no artistic ambient"),Dark.bDisableBackgroundAmbient && Dark.BackgroundAmbient==0.f);
+    TestEqual(TEXT("Dark physical fill off"),Dark.PixelAmbientLux,0.f);
+    TestFalse(TEXT("Raw is opt-in, not a game preset"),Atmospheric.bPixelRawPalette);
+    FPWGVisualProfile Pixel=Atmospheric;
+    Pixel.bPixelRawPalette=true;Pixel.PixelAmbientLux=128.f;
+    TestTrue(TEXT("Raw survives sanitization"),Pixel.Sanitized().bPixelRawPalette);
+    TestEqual(TEXT("Physical light audit can exceed previous 8 lux cap"),Pixel.Sanitized().PixelAmbientLux,128.f);
+    Pixel.PixelAmbientLux=999.f;
+    TestEqual(TEXT("Physical fill upper audit bound"),Pixel.Sanitized().PixelAmbientLux,512.f);
     TestTrue(TEXT("Dark no depth haze/lift"),Dark.DepthFog==0.f && Dark.DepthBrightness==1.f && Dark.DepthContrast==1.f);
     TestTrue(TEXT("Atmospheric purple"),Atmospheric.AtmosphereColor.B>Atmospheric.AtmosphereColor.G);
     TestTrue(TEXT("Warm red"),Warm.AtmosphereColor.R>Warm.AtmosphereColor.B);

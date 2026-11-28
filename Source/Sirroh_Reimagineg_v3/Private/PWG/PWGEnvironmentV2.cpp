@@ -908,7 +908,11 @@ void APWGEnvironmentV2::UpdateCelestial(const float DeltaSeconds, const FVector&
 	const FVector CardNormal = Generator
 		? Generator->GetActorTransform().TransformVectorNoScale(-FVector::YAxisVector).GetSafeNormal()
 		: -FVector::YAxisVector;
-	CameraFillLight->SetWorldRotation((bPixelLit?-CardNormal:CardNormal).Rotation());
+    FVector FillDirection=bPixelLit?-CardNormal:CardNormal;
+#if !UE_BUILD_SHIPPING
+    if(bPixelLit && bPixelVisibilityReverseFill)FillDirection=-FillDirection;
+#endif
+    CameraFillLight->SetWorldRotation(FillDirection.Rotation());
 
 }
 
@@ -1087,10 +1091,16 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     // scene depth, and lock exposure without camera aperture/shutter/ISO.
     // On leaving Raw, restore the normal camera/volume exposure route.
     auto& RawExposure=DepthPostProcess->Settings;
-    RawExposure.bOverride_AutoExposureMethod=bRawPalette;
-    RawExposure.bOverride_AutoExposureBias=bRawPalette;
-    RawExposure.bOverride_AutoExposureApplyPhysicalCameraExposure=bRawPalette;
-    if(bRawPalette)
+    bool bManualExposure=bRawPalette;
+#if !UE_BUILD_SHIPPING
+    bManualExposure|=bPixelActive && bPixelVisibilityManualExposure;
+#endif
+    RawExposure.bOverride_AutoExposureMethod=bManualExposure;
+    RawExposure.bOverride_AutoExposureBias=bManualExposure;
+    RawExposure.bOverride_AutoExposureApplyPhysicalCameraExposure=bManualExposure;
+    RawExposure.bOverride_ToneCurveAmount=bRawPalette;
+    if(bRawPalette)RawExposure.ToneCurveAmount=0.f;
+    if(bManualExposure)
     {
         RawExposure.AutoExposureMethod=AEM_Manual;
         RawExposure.AutoExposureBias=0.f;

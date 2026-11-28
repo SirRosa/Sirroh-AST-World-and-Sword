@@ -626,6 +626,7 @@ private:
     void VerifySkySequence();
     void VerifySemanticVisuals();
     int32 VisualProbeStep=0;
+    bool bPixelVisibilityReverseFill=false, bPixelVisibilityManualExposure=false;
     int32 VisualProbeFrames=0;
     FVector VisualProbeCamera=FVector::ZeroVector;
     FRotator VisualProbeRotation=FRotator::ZeroRotator;

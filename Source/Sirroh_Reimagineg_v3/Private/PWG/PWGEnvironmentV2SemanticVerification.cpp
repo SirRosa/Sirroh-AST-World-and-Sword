@@ -58,6 +58,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     };
     auto SetPreset=[this](int32 Preset,bool bMasks=false,bool bLegacy=false,bool bStage1=false)
     {
+        bPixelVisibilityReverseFill=false;bPixelVisibilityManualExposure=false;
         VisualProfile=FPWGVisualProfile::DemoPreset(bCaveQA && Preset==1?3:Preset);
         VisualProfile.bUseReliefCheckpoint=bDepthQA && !bCaveQA;
         if(bCaveQA){VisualProfile.bCaveReference=true; VisualProfile.bCaveGeological=bGeoQA; if(bGeoQA)VisualProfile.CaveVisualDepthMetres=30.f; else if(VisualProbeScene==8)VisualProfile.CaveVisualDepthMetres=35.f;}
@@ -346,10 +347,16 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             VisualProfile.Strength=0.f;RefreshVisualProfile();Advance(76);return;
         case 76:
             if(!Capture(TEXT("Lit128_NoDepthPP")))return;
-            SetPreset(1);VisualProfile.PixelAmbientLux=512.f;RefreshVisualProfile();Advance(77);return;
+            bPixelVisibilityManualExposure=true;RefreshVisualProfile();Advance(78);return;
         case 77:
             if(!Capture(TEXT("Atmospheric_512lux")))return;
             SetPreset(0);Advance(8);return;
+        case 78:
+            if(!Capture(TEXT("Lit128_ManualExposure")))return;
+            bPixelVisibilityReverseFill=true;RefreshVisualProfile();Advance(79);return;
+        case 79:
+            if(!Capture(TEXT("Lit128_ReverseFill")))return;
+            SetPreset(1);VisualProfile.PixelAmbientLux=512.f;RefreshVisualProfile();Advance(77);return;
         case 14: if(bGeoQA){NextScene();return;} SetPreset(1);break;
         case 15: if(!Capture(TEXT("TorchAtmospheric")))return;break;
         case 16:
