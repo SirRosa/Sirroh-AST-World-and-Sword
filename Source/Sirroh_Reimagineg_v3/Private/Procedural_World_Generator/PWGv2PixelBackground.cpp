@@ -6,6 +6,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/PlatformTime.h"
 #include "Async/ParallelFor.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Crc.h"
 
 float APWGv2Generator::GetPixelBackgroundStart() const
 {
@@ -25,6 +28,49 @@ bool APWGv2Generator::EnsurePixelBackgroundMaterial()
         if(!PixelBackgroundMaterial) UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D: data material missing; retain Stage 1"));
     }
     return IsValid(PixelBackgroundMaterial);
+}
+
+bool APWGv2Generator::EnsurePixelRawMaterial()
+{
+    if (!bTriedPixelRawMaterial)
+    {
+        bTriedPixelRawMaterial=true;
+        PixelRawMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_PixelBackground_RawPalette.M_PWGv2_PixelBackground_RawPalette"));
+        if(!PixelRawMaterial) UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D: Raw Palette asset missing; retain lit material"));
+    }
+    return IsValid(PixelRawMaterial);
+}
+
+void APWGv2Generator::ApplyPixelMaterialMode(int32 Index,UProceduralMeshComponent* Mesh)
+{
+    const auto* Batch=DecorationChunks.Find(Index);
+    if(!Batch || !Mesh || !Batch->bPixelReady)return;
+    UMaterialInterface* Parent=bPixelRawPalette?PixelRawMaterial.Get():PixelBackgroundMaterial.Get();
+    if(!Parent)return;
+    for(const auto& Tile:Batch->PixelTiles)
+    {
+        auto* Old=Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(Tile.Section));
+        if(!Old || Old->GetMaterial()==Parent->GetMaterial())continue;
+        UTexture* Data=nullptr; FLinearColor Scale,Offset;
+        if(!Old->GetTextureParameterValue(FMaterialParameterInfo(FName(TEXT("PixelData"))),Data) || !Data ||
+           !Old->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataScale"))),Scale) ||
+           !Old->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataOffset"))),Offset))
+        {
+            UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D_RAW_SWAP_FAIL chunk=%d section=%d"),Index,Tile.Section);
+            continue;
+        }
+        auto* New=UMaterialInstanceDynamic::Create(Parent,this);
+        if(!New)continue;
+        New->SetTextureParameterValue(TEXT("PixelData"),Data);
+        New->SetVectorParameterValue(TEXT("DataScale"),Scale);
+        New->SetVectorParameterValue(TEXT("DataOffset"),Offset);
+        New->SetScalarParameterValue(TEXT("PaletteOverride"),float(PixelPalette));
+        New->SetScalarParameterValue(TEXT("Plan"),float(Tile.Plan));
+        New->SetScalarParameterValue(TEXT("GradeStrength"),PixelDepthGrade);
+        Mesh->SetMaterial(Tile.Section,New);
+    }
+    // The custom-depth pass must see the exact same masked texture.
+    SyncVisualMasks(Index);
 }
 
 void APWGv2Generator::BuildPixelBackground(int32 Index,float Start,float End,UProceduralMeshComponent* Mesh)
@@ -68,7 +114,7 @@ void APWGv2Generator::BuildPixelBackground(int32 Index,float Start,float End,UPr
             Card.Quad(FVector(Start,Y,Range.X),FVector(End,Y,Range.X),FVector(End,Y,Range.Y),FVector(Start,Y,Range.Y),FLinearColor::White);
             Card.UV={FVector2D(0,0),FVector2D(1,0),FVector2D(1,1),FVector2D(0,1)};
             Card.Submit(Mesh,Section);
-            auto* MID=UMaterialInstanceDynamic::Create(PixelBackgroundMaterial,this);
+            auto* MID=UMaterialInstanceDynamic::Create(bPixelRawPalette && IsValid(PixelRawMaterial)?PixelRawMaterial.Get():PixelBackgroundMaterial.Get(),this);
             Mesh->SetMaterial(Section,MID);
             Mesh->SetMeshSectionVisible(Section,false);
             FPWGPixelTile Tile;Tile.Section=Section;Tile.Plan=P;
@@ -124,7 +170,7 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
     // Stage textures first. Do not mix old and new mask grids on a failed allocation.
     TArray<UTexture2D*> NewTextures;NewTextures.Reserve(Batch->PixelTiles.Num());
     TArray<FLinearColor> Scales,Offsets;
-    for(const auto& Tile:Batch->PixelTiles)
+    for(auto& Tile:Batch->PixelTiles)
     {
         const auto& Box=Tile.Bounds;
         const int32 GZ=FMath::FloorToInt(Box.Min.Z/Cell)-1;
@@ -138,6 +184,21 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
             for(int32 I=0;I<W;++I)
                 Pixels[J*W+I]=PWGPixelField::Paint(Columns[Tile.Plan][I],(GX+I+.5)*Cell,Z,Tile.Plan,Seed,S);
         });
+#if !UE_BUILD_SHIPPING
+        static const bool bAudit=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelVisibilityQA"));
+        if(bAudit)
+        {
+            Tile.AuditOpaque=Tile.AuditTransparent=Tile.AuditInvalid=0;
+            Tile.AuditIndexBits=0;
+            for(const FColor& C:Data)
+            {
+                if(C.A==0)++Tile.AuditTransparent;
+                else if(C.A==255){++Tile.AuditOpaque; if(C.R%36==0 && C.R<=252)Tile.AuditIndexBits|=1u<<(C.R/36);else ++Tile.AuditInvalid;}
+                else ++Tile.AuditInvalid;
+            }
+            Tile.AuditCRC=FCrc::MemCrc32(Data.GetData(),Data.Num()*sizeof(FColor));
+        }
+#endif
         UTexture2D* Tex=UTexture2D::CreateTransient(W,H,PF_B8G8R8A8);
         if(!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num()==0) return false;
         Tex->SRGB=false;Tex->NeverStream=true;Tex->Filter=TF_Nearest;
@@ -177,12 +238,15 @@ void APWGv2Generator::UpdatePixelMaterialParameters(int32 Index,UProceduralMeshC
 void APWGv2Generator::SetPixelBackgroundPresentation(const FPWGVisualProfile& P,bool bEnabled)
 {
     bEnabled=bEnabled && EnsurePixelBackgroundMaterial();
+    const bool bRaw=P.bPixelRawPalette && EnsurePixelRawMaterial();
+    const bool bRawChanged=bRaw!=bPixelRawPalette;
     const bool bRepaint=PixelCellCm!=P.PixelCellCm || PixelStructureScale!=P.PixelStructureScale ||
         PixelDensity!=P.PixelDensity || PixelRoughness!=P.PixelRoughness || PixelErosion!=P.PixelErosion || PixelDetail!=P.PixelDetail;
     const float Grade=P.bEnableDepthGrading?P.PixelDepthGrade:0.f;
     const bool bPalette=PixelPalette!=P.PixelPalette || PixelDepthGrade!=Grade;
     const bool bVisibility=bPixelBackgroundActive!=bEnabled || PixelPlanCount!=P.PixelPlanCount;
-    if(!bRepaint && !bPalette && !bVisibility)return;
+    if(!bRepaint && !bPalette && !bVisibility && !bRawChanged)return;
+    bPixelRawPalette=bRaw;
     bPixelBackgroundActive=bEnabled;PixelPlanCount=P.PixelPlanCount;PixelPalette=P.PixelPalette;PixelDepthGrade=Grade;
     PixelCellCm=P.PixelCellCm;PixelStructureScale=P.PixelStructureScale;PixelDensity=P.PixelDensity;
     PixelRoughness=P.PixelRoughness;PixelErosion=P.PixelErosion;PixelDetail=P.PixelDetail;
@@ -195,7 +259,44 @@ void APWGv2Generator::SetPixelBackgroundPresentation(const FPWGVisualProfile& P,
             Batch->bPixelReady=RepaintPixelBackground(Pair.Key,Mesh);
             if(!Batch->bPixelReady)UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D: repaint failed chunk %d; Stage 1 retained"),Pair.Key);
         }
+        if(bRawChanged)ApplyPixelMaterialMode(Pair.Key,Mesh);
         if(bPalette || bRepaint)UpdatePixelMaterialParameters(Pair.Key,Mesh);
         if(bVisibility || bRepaint)ApplyChunkLayerVisibility(Pair.Key);
     }
 }
+
+#if !UE_BUILD_SHIPPING
+void APWGv2Generator::LogPixelVisibilityAudit(const FVector& Focus) const
+{
+    const FVector Local=GetActorTransform().InverseTransformPosition(Focus);
+    for(const auto& Pair:UndergroundChunks)
+    {
+        const auto* Mesh=Pair.Value.Get(); const auto* Batch=DecorationChunks.Find(Pair.Key);
+        if(!Mesh || !Batch || Batch->PixelTiles.IsEmpty())continue;
+        const auto& Rect=Batch->PixelTiles[0].Bounds;
+        if(Local.X<Rect.Min.X-800 || Local.X>Rect.Max.X+800)continue;
+        for(int32 S=5;S<Mesh->GetNumSections();++S)
+        {
+            const auto* Part=Mesh->GetProcMeshSection(S);
+            if(!Part || Part->ProcVertexBuffer.IsEmpty())continue;
+            if(Part->SectionLocalBox.Min.Z>Local.Z+500 || Part->SectionLocalBox.Max.Z<Local.Z-500)continue;
+            if((S>=5 && S<=9)||(S>=13 && S<=16)||IsEarthSection(S)||IsSolidCutawaySection(S))
+                UE_LOG(LogTemp,Display,TEXT("PIXEL_OCCLUSION chunk=%d section=%d visible=%d Y=[%.1f,%.1f] earth=%d cutaway=%d"),Pair.Key,S,Mesh->IsMeshSectionVisible(S),Part->SectionLocalBox.Min.Y,Part->SectionLocalBox.Max.Y,IsEarthSection(S),IsSolidCutawaySection(S));
+        }
+        for(const auto& Tile:Batch->PixelTiles)
+        {
+            if(Tile.Bounds.Min.Z>Local.Z+500 || Tile.Bounds.Max.Z<Local.Z-500)continue;
+            const auto* Part=Mesh->GetProcMeshSection(Tile.Section);
+            if(!Part || Part->ProcVertexBuffer.IsEmpty())continue;
+            const auto* Mat=Mesh->GetMaterial(Tile.Section);
+            UTexture* Tex=nullptr;FLinearColor Scale,Offset;
+            const bool bParams=Mat && Mat->GetTextureParameterValue(FMaterialParameterInfo(FName(TEXT("PixelData"))),Tex)
+                && Mat->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataScale"))),Scale)
+                && Mat->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("DataOffset"))),Offset);
+            const auto* T=Cast<UTexture2D>(Tex);
+            const FVector Normal=Mesh->GetComponentTransform().TransformVectorNoScale(Part->ProcVertexBuffer[0].Normal);
+            UE_LOG(LogTemp,Display,TEXT("PIXEL_AUDIT chunk=%d section=%d plan=%d visible=%d Y=%.1f normal=%s channels=%d%d%d material=%s data=%d dims=%dx%d srgb=%d filter=%d opaque=%d transparent=%d invalid=%d indices=0x%02x crc=%08x UV=%s scale=%s offset=%s"),Pair.Key,Tile.Section,Tile.Plan,Mesh->IsVisible() && Mesh->IsMeshSectionVisible(Tile.Section),Tile.Bounds.Min.Y,*Normal.ToCompactString(),Mesh->LightingChannels.bChannel0,Mesh->LightingChannels.bChannel1,Mesh->LightingChannels.bChannel2,Mat?*Mat->GetMaterial()->GetName():TEXT("None"),bParams,T?T->GetSizeX():0,T?T->GetSizeY():0,T?int32(T->SRGB):-1,T?int32(T->Filter):-1,Tile.AuditOpaque,Tile.AuditTransparent,Tile.AuditInvalid,Tile.AuditIndexBits,Tile.AuditCRC,*Part->ProcVertexBuffer[0].UV0.ToString(),*Scale.ToString(),*Offset.ToString());
+        }
+    }
+}
+#endif

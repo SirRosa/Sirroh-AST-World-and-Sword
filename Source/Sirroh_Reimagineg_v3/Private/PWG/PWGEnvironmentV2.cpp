@@ -1007,7 +1007,7 @@ FString APWGEnvironmentV2::GetVisualProfileStatus() const
     const bool bRequested=VisualProfile.Mode==EPWGVisualMode::Underground_Stylized;
     const bool bV2=StylizedDepthMaterial && ActiveDepthMaterial==StylizedDepthMaterial;
     if (const auto* G=Cast<APWGv2Generator>(Generator); G && G->IsPixelBackgroundActive())
-        return FString::Printf(TEXT("Procedural Pixel 2D (global), %d plans + closure; ambient %.2f lux"),VisualProfile.PixelPlanCount,VisualProfile.bDisableBackgroundAmbient?0.f:VisualProfile.PixelAmbientLux);
+        return FString::Printf(TEXT("Procedural Pixel 2D (global), %d plans + closure; %s; ambient %.2f lux"),VisualProfile.PixelPlanCount,G->IsPixelRawPaletteActive()?TEXT("Raw Palette / Art Preview"):TEXT("Lit"),VisualProfile.bDisableBackgroundAmbient?0.f:VisualProfile.PixelAmbientLux);
     const TCHAR* Effective=!IsDepthAtmosphereActive()?TEXT("Disabled"):bV2?TEXT("Underground_Stylized"):TEXT("Legacy");
     return FString::Printf(TEXT("Runtime: %s | requested: %s | %s | mix %.2f | stencil 201/202/203 | transient | Depth prototype asset: %s | Cave reference: %s"),
         Effective,bRequested?TEXT("Underground_Stylized"):TEXT("Legacy"),
@@ -1082,6 +1082,20 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
     const bool bPixelWanted=bV2 && bHasPixelBackgroundAsset && Profile.bProceduralPixel && !Profile.bCompareStage1 && !Profile.bCaveReference && !Profile.bUseReliefCheckpoint;
     WorldGenerator->SetPixelBackgroundPresentation(Profile,bPixelWanted);
     const bool bPixelActive=WorldGenerator->IsPixelBackgroundActive();
+    const bool bRawPalette=WorldGenerator->IsPixelRawPaletteActive();
+    // Raw is diagnostic only. Disable this stylization pass, retain ordinary
+    // scene depth, and lock exposure without camera aperture/shutter/ISO.
+    // On leaving Raw, restore the normal camera/volume exposure route.
+    auto& RawExposure=DepthPostProcess->Settings;
+    RawExposure.bOverride_AutoExposureMethod=bRawPalette;
+    RawExposure.bOverride_AutoExposureBias=bRawPalette;
+    RawExposure.bOverride_AutoExposureApplyPhysicalCameraExposure=bRawPalette;
+    if(bRawPalette)
+    {
+        RawExposure.AutoExposureMethod=AEM_Manual;
+        RawExposure.AutoExposureBias=0.f;
+        RawExposure.AutoExposureApplyPhysicalCameraExposure=false;
+    }
     if (bPixelActive && CameraFillLight)
         CameraFillLight->SetIntensity(Profile.bDisableBackgroundAmbient?0.f:Profile.PixelAmbientLux);
     WorldGenerator->UpdateCaveReference(Profile,!bPixelActive && bV2 && bHasIndependentCaveAsset && bReferenceView && RefPawn && !Profile.bCompareStage1,
@@ -1212,6 +1226,9 @@ void APWGEnvironmentV2::UpdateDepthAtmosphere(float SunAmount)
         }
         if (bHasPixelBackgroundAsset)
         {
+            Scalar(TEXT("ProfileStrength"),bRawPalette?0.f:(Profile.CaveMaterialDebug>0 && Profile.bCaveReference?0.f:Profile.Strength));
+            Scalar(TEXT("ProfileVisualizeMasks"),!bRawPalette && Profile.bVisualizeMasks?1.f:0.f);
+            Scalar(TEXT("DepthLayerDebug"),!bRawPalette && Profile.bVisualizeDepthLayers && !Profile.bCompareStage1?1.f:0.f);
             Scalar(TEXT("PixelMode"),bPixelActive?1.f:0.f);
             Scalar(TEXT("PixelStart"),WorldGenerator->GetPixelBackgroundStart());
             Scalar(TEXT("PixelSpan"),WorldGenerator->GetPixelBackgroundSpan());

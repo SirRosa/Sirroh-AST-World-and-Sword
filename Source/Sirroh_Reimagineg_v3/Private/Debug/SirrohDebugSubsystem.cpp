@@ -455,8 +455,8 @@ private:
             Group(TEXT("Powierzchnie rozgrywki"),{TEXT("GameplayBrightness"),TEXT("GameplayContrast"),TEXT("GameplayTint")});
             Group(TEXT("Przekroj"),{TEXT("ForegroundDarkness"),TEXT("ForegroundTint")});
             Group(TEXT("Atmosfera"),{TEXT("AtmosphereColor"),TEXT("FogStrength"),TEXT("BackRange")});
-            Group(TEXT("Procedural Pixel 2D (global)"),{TEXT("bProceduralPixel"),TEXT("bCompareStage1"),TEXT("PixelPlanCount"),TEXT("PixelStructureScale"),TEXT("PixelDensity"),TEXT("PixelRoughness"),TEXT("PixelErosion"),TEXT("PixelDetail"),TEXT("PixelCellCm"),TEXT("PixelDepthGrade"),TEXT("PixelAmbientLux"),TEXT("PixelPalette"),TEXT("bVisualizeDepthLayers"),TEXT("bVisualizeMasks")});
-            Label(TEXT("Pixel 2D domyslny; CompareStage1 = A/B. Paleta 0 auto, 1 plytka, 2 gleboka. Ambient = rzeczywiste swiatlo, zero = wylaczone. Zmiany struktury przebuduja tylko dane wizualne."));
+            Group(TEXT("Procedural Pixel 2D (global)"),{TEXT("bProceduralPixel"),TEXT("bPixelRawPalette"),TEXT("bCompareStage1"),TEXT("PixelPlanCount"),TEXT("PixelStructureScale"),TEXT("PixelDensity"),TEXT("PixelRoughness"),TEXT("PixelErosion"),TEXT("PixelDetail"),TEXT("PixelCellCm"),TEXT("PixelDepthGrade"),TEXT("PixelAmbientLux"),TEXT("PixelPalette"),TEXT("bVisualizeDepthLayers"),TEXT("bVisualizeMasks")});
+            Label(TEXT("Raw Palette / Art Preview = rzeczywiste maski i kolory bez swiatla; CompareStage1 = A/B. Paleta 0 auto, 1 plytka, 2 gleboka. Ambient = rzeczywiste swiatlo, zero = wylaczone. Zmiany struktury przebuduja tylko dane wizualne."));
             Group(TEXT("Procedural Depth Layers"),{TEXT("bCompareStage1"),TEXT("bEnableDepthGrading"),TEXT("DepthStart"),TEXT("DepthRange"),TEXT("DepthBrightness"),
                 TEXT("DepthContrast"),TEXT("DepthDesaturation"),TEXT("DepthTintStrength"),TEXT("DepthTint"),TEXT("DepthFog"),
                 TEXT("bEnableDepthLayers"),TEXT("DepthFormationCount"),TEXT("bShowDepthNear"),TEXT("bShowDepthMid"),TEXT("bShowDepthBacking"),TEXT("bVisualizeDepthLayers")});

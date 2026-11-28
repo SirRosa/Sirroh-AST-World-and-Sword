@@ -214,6 +214,9 @@ struct FPWGVisualProfile
     // Global planar XZ data, independent of collision and saved topology.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D")
     bool bProceduralPixel=true;
+    // Art review only: same palette, mask, UV and depth, no physical lighting.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(DisplayName="Raw Palette / Art Preview"))
+    bool bPixelRawPalette=false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0",ClampMax="3"))
     int32 PixelPlanCount=3;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.5",ClampMax="2.5"))
@@ -231,7 +234,7 @@ struct FPWGVisualProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="1.0"))
     float PixelDepthGrade=1.f;
     // Real directional fill in lux; zero disables it. No emissive or additive haze.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="8.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.0",ClampMax="512.0"))
     float PixelAmbientLux=2.5f;
     // 0 auto by layer/biome, 1 shallow, 2 deep.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0",ClampMax="2"))
@@ -373,7 +376,7 @@ struct FPWGVisualProfile
         Out.PixelErosion=Safe(PixelErosion,Defaults.PixelErosion,0.f,1.f);
         Out.PixelDetail=Safe(PixelDetail,Defaults.PixelDetail,0.f,1.f);
         Out.PixelDepthGrade=Safe(PixelDepthGrade,Defaults.PixelDepthGrade,0.f,1.f);
-        Out.PixelAmbientLux=Safe(PixelAmbientLux,Defaults.PixelAmbientLux,0.f,8.f);
+        Out.PixelAmbientLux=Safe(PixelAmbientLux,Defaults.PixelAmbientLux,0.f,512.f);
         Out.CaveMaterialDebug=FMath::Clamp(CaveMaterialDebug,0,3);
         Out.CaveTextureAmbient=Safe(CaveTextureAmbient,Defaults.CaveTextureAmbient,0.f,1.f);
         Out.CaveVisualDepthMetres=Safe(CaveVisualDepthMetres,Defaults.CaveVisualDepthMetres,5.f,50.f);
