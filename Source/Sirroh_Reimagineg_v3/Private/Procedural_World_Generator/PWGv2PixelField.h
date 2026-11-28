@@ -64,7 +64,7 @@ namespace PWGPixelField
         }
         return Out;
     }
-    inline FColor Paint(const FColumn& C,double X,double Z,int32 Plan,uint32 Seed,const FSettings& S)
+    inline FColor PaintLegacy(const FColumn& C,double X,double Z,int32 Plan,uint32 Seed,const FSettings& S)
     {
         double Edge=1.e10;
         bool Open=false;
@@ -101,4 +101,103 @@ namespace PWGPixelField
         if(Plan==3 && I==6) I=5;
         return FColor(uint8(I*36),Layer>=2?255:0,0,255);
     }
+    // The mask is EXACTLY the Compose field, not a new composition algorithm.
+    // These are semantic surface indices: 0 fissure, 1 recess, 2 shadowed
+    // material, 3 body, 4 subtle raised material, 5/6/7 mineral traces.
+    // The B byte is independent of the indices: a smoothly varying biome tint.
+    inline uint8 BiomeTint(int32 A,int32 B,float Alpha)
+    {
+        const auto Tone=[](int32 Id){return .5+.5*FMath::Sin(double(Id)*2.39996323+.35);};
+        return uint8(FMath::Clamp(FMath::RoundToInt(255.*FMath::Lerp(Tone(A),Tone(B),double(FMath::Clamp(Alpha,0.f,1.f)))),0,255));
+    }
+    inline double ContourZ(const FColumn* C,double E,bool bUpper)
+    {
+        if(!C)return E;
+        double Result=E,Best=1.e10;
+        for(const auto& B:C->Voids)
+        {
+            const double Candidate=bUpper?B.Y:B.X;
+            const double D=FMath::Abs(Candidate-E);
+            if(D<Best){Best=D;Result=Candidate;}
+        }
+        // A missing/discontinuous opening is not a continuous contour.
+        return Best<96.0?Result:E;
+    }
+    inline FColor Paint(const FColumn& C,double X,double Z,int32 Plan,uint32 Seed,const FSettings& S,
+                        const FColumn* Left=nullptr,const FColumn* Right=nullptr,double Cell=4.0,uint8 Biome=128)
+    {
+        double Edge=1.e10,E=Z;
+        bool Open=false,bUpper=false;
+        for(const FVector2D& B:C.Voids)
+        {
+            if(Z>B.X && Z<B.Y)Open=true;
+            const double DL=FMath::Abs(Z-B.X),DH=FMath::Abs(Z-B.Y);
+            if(DL<Edge){Edge=DL;E=B.X;bUpper=false;}
+            if(DH<Edge){Edge=DH;E=B.Y;bUpper=true;}
+        }
+        if(Plan<3 && Open)return FColor(0,0,0,0);
+        int32 Layer=0;double Best=1.e10;
+        for(int32 L=0;L<4;++L)
+        {
+            const double D=FMath::Abs(Z-(C.Layers[L].X+C.Layers[L].Y)*.5);
+            if(D<Best){Best=D;Layer=L;}
+        }
+        const uint32 Key=Seed+uint32(Plan)*0x9E3779B9u;
+        const double Scale=S.Scale*(1.0+.30*Plan);
+        const double Detail=S.Detail;
+        // A broad sedimentary structure has a dominant, nearly uniform body.
+        // Noise perturbs the bedding phase, not the identity of the material.
+        const double U=X/(340.0*Scale),V=Z/(260.0*Scale);
+        const double Warp=Noise(U,V,Key+1001u);
+        const double Bend=Noise(U*.83+5.0,V*.66,Key+1003u);
+        const double Phase=Z/(145.0*Scale)+.32*U+.65*Warp+.45*Bend;
+        const double Strata=FMath::Sin(Phase*2.15);
+        const double Broad=.72*Strata+.28*Warp;
+        int32 I=3;
+        if(Broad<-.62)I=2;
+        else if(Broad>.72)I=4;
+        // The closure is a quiet broad structure; no fissure, eroded rims,
+        // accent islands or microtexture survive this depth.
+        if(Plan==3)
+        {
+            I=Broad<-.80?2:Broad>.84?4:3;
+            return FColor(uint8(I*36),Layer>=2?255:0,Biome,255);
+        }
+        // Normal distance is approximated from the actual contour tangent.
+        // This avoids thick outlines on sloped edges. Only isolated segments
+        // get a recess or a chipped edge; never a continuous border.
+        double Dist=Edge;
+        if(Edge<110.*Scale)
+        {
+            const double Slope=FMath::Clamp((ContourZ(Right,E,bUpper)-ContourZ(Left,E,bUpper))/FMath::Max(2.*Cell,1.),-5.,5.);
+            Dist=Edge/FMath::Sqrt(1.+Slope*Slope);
+        }
+        const double Along=Noise(X/(96.*Scale),E/(230.*Scale),Key+3011u);
+        const double Relief=Noise(X/(95.*Scale),Z/(48.*Scale),Key+3013u);
+        if(Plan==2)
+        {
+            if(Dist<28.*Scale && Along<-.36 && Relief<-.15 && Detail>.2)I=2;
+            return FColor(uint8(I*36),Layer>=2?255:0,Biome,255);
+        }
+        // Thin, discontinuous fissures follow bedding, plus contour-local
+        // pockets. Small-scale noise only gates existing structural details.
+        const double Micro=Noise(X/(19.*Scale),Z/(13.*Scale),Key+3017u);
+        const double Fracture=FMath::Sin(Phase*3.1+.65*Relief);
+        if(Dist<58.*Scale && Along<-.28 && Relief<.03 && S.Erosion>.12)I=1;
+        if(Dist<25.*Scale && Along>.26 && Relief>.24 && Detail>.18)I=4;
+        if(Detail>.15 && FMath::Abs(Fracture)<(.07+.045*S.Roughness) &&
+            Relief<-.17 && Along<.25 && Micro<.58)
+            I=Plan==0?0:1;
+        // Mineral traces occur only in small, erosion-associated islands.
+        // No entire low-frequency noise lobe is assigned a contrasting hue.
+        if(Plan==0 && Detail>.32 && S.Erosion>.2 && I!=0 && Dist<100.*Scale &&
+            FMath::Abs(Fracture)<.32 && Relief>.33 && Micro>.53 && Along>.05)
+        {
+            I=Along>.60?6:Along<.24?7:5;
+        }
+        else if(Plan==1 && Detail>.45 && S.Erosion>.4 && I==3 &&
+                 Dist<60.*Scale && Relief>.56 && Micro>.65 && Along>.25)I=5;
+        return FColor(uint8(I*36),Layer>=2?255:0,Biome,255);
+    }
+
 }

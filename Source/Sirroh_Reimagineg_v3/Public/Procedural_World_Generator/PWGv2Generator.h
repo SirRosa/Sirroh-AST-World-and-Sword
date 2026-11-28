@@ -62,6 +62,8 @@ public:
     float GetCaveReferenceDepth() const {return CaveReferenceDepth;}
     void SetPixelBackgroundPresentation(const FPWGVisualProfile& Profile,bool bEnabled);
     bool IsPixelBackgroundActive() const {return bUndergroundView && bPixelBackgroundActive && BackgroundAuditIsolation==0;}
+    bool IsPixelReadabilityActive() const { return bPixelReadability && bHasPixelReadabilityMaterial; }
+    bool HasPixelReadabilityMaterial() const { return bHasPixelReadabilityMaterial; }
     bool IsPixelRawPaletteActive() const { return IsPixelBackgroundActive() && bPixelRawPalette; }
 #if !UE_BUILD_SHIPPING
     void LogPixelVisibilityAudit(const FVector& Focus) const;
@@ -205,6 +207,7 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> PixelBackgroundMaterial;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> PixelRawMaterial;
     bool bPixelRawPalette=false, bTriedPixelRawMaterial=false;
+    bool bPixelReadability=true, bHasPixelReadabilityMaterial=false;
     bool EnsurePixelRawMaterial();
     void ApplyPixelMaterialMode(int32 Index,UProceduralMeshComponent* Mesh);
     float PixelCellCm=4.f, PixelStructureScale=1.f, PixelDensity=.55f, PixelRoughness=.7f, PixelErosion=.65f, PixelDetail=.7f;

@@ -24,7 +24,14 @@ bool APWGv2Generator::EnsurePixelBackgroundMaterial()
     if (!bTriedPixelMaterial)
     {
         bTriedPixelMaterial=true;
-        PixelBackgroundMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_PixelBackground.M_PWGv2_PixelBackground"));
+        PixelBackgroundMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_PixelBackground_Readability.M_PWGv2_PixelBackground_Readability"));
+        bHasPixelReadabilityMaterial=IsValid(PixelBackgroundMaterial);
+        if(!bHasPixelReadabilityMaterial)
+        {
+            bPixelReadability=false;
+            UE_LOG(LogTemp,Warning,TEXT("PWG_PIXEL2D: Readability asset missing, use accepted Pixel2D checkpoint"));
+            PixelBackgroundMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_PixelBackground.M_PWGv2_PixelBackground"));
+        }
         if(!PixelBackgroundMaterial) UE_LOG(LogTemp,Error,TEXT("PWG_PIXEL2D: data material missing; retain Stage 1"));
     }
     return IsValid(PixelBackgroundMaterial);
@@ -147,6 +154,8 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
     S.Erosion=PixelErosion;S.Detail=PixelDetail;
     const uint32 Seed=uint32(WorldData->Seed);
     TArray<PWGPixelField::FColumn> Columns[4];
+    TArray<uint8> BiomeTints;BiomeTints.Reserve(W);
+    const bool bNew=bPixelReadability && bHasPixelReadabilityMaterial;
     for(int32 P=0;P<4;++P) Columns[P].Reserve(W);
     for(int32 I=0;I<W;++I)
     {
@@ -156,6 +165,7 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
         PWGPixelField::FContext C;
         int32 A=0,B=0;float Alpha=0.f;BiomeMix(ContextX,A,B,Alpha);
         C.Biome=FMath::Lerp(float(A),float(B),Alpha);
+        BiomeTints.Add(PWGPixelField::BiomeTint(A,B,Alpha));
         for(int32 L=1;L<=4;++L)
         {
             C.Layers[L-1]=FVector2D(LayerFloor(L,ContextX),LayerCeiling(L,ContextX));
@@ -186,10 +196,16 @@ bool APWGv2Generator::RepaintPixelBackground(int32 Index,UProceduralMeshComponen
         {
             const double Z=(GZ+J+.5)*Cell;
             for(int32 I=0;I<W;++I)
-                Pixels[J*W+I]=PWGPixelField::Paint(Columns[Tile.Plan][I],(GX+I+.5)*Cell,Z,Tile.Plan,Seed,S);
+            {
+                const auto& Cols=Columns[Tile.Plan];
+                const double X=(GX+I+.5)*Cell;
+                Pixels[J*W+I]=bNew?PWGPixelField::Paint(Cols[I],X,Z,Tile.Plan,Seed,S,
+                    I>0?&Cols[I-1]:nullptr,I+1<W?&Cols[I+1]:nullptr,Cell,BiomeTints[I]):
+                    PWGPixelField::PaintLegacy(Cols[I],X,Z,Tile.Plan,Seed,S);
+            }
         });
 #if !UE_BUILD_SHIPPING
-        static const bool bAudit=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelVisibilityQA"));
+        static const bool bAudit=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelVisibilityQA")) || FParse::Param(FCommandLine::Get(),TEXT("PWGPixelReadabilityQA"));
         if(bAudit)
         {
             Tile.AuditOpaque=Tile.AuditTransparent=Tile.AuditInvalid=0;
@@ -236,6 +252,7 @@ void APWGv2Generator::UpdatePixelMaterialParameters(int32 Index,UProceduralMeshC
             MID->SetScalarParameterValue(TEXT("PaletteOverride"),float(PixelPalette));
             MID->SetScalarParameterValue(TEXT("Plan"),float(Tile.Plan));
             MID->SetScalarParameterValue(TEXT("GradeStrength"),PixelDepthGrade);
+            if(bHasPixelReadabilityMaterial)MID->SetScalarParameterValue(TEXT("Readability"),bPixelReadability?1.f:0.f);
         }
 }
 
@@ -244,13 +261,16 @@ void APWGv2Generator::SetPixelBackgroundPresentation(const FPWGVisualProfile& P,
     bEnabled=bEnabled && EnsurePixelBackgroundMaterial();
     const bool bRaw=P.bPixelRawPalette; // deferred BaseColor preview, no material swaps
     const bool bRawChanged=bRaw!=bPixelRawPalette;
-    const bool bRepaint=PixelCellCm!=P.PixelCellCm || PixelStructureScale!=P.PixelStructureScale ||
+    const bool bNew=P.bPixelReadability && bHasPixelReadabilityMaterial;
+    const bool bReadabilityChanged=bNew!=bPixelReadability;
+    const bool bRepaint=bReadabilityChanged || PixelCellCm!=P.PixelCellCm || PixelStructureScale!=P.PixelStructureScale ||
         PixelDensity!=P.PixelDensity || PixelRoughness!=P.PixelRoughness || PixelErosion!=P.PixelErosion || PixelDetail!=P.PixelDetail;
     const float Grade=P.bEnableDepthGrading?P.PixelDepthGrade:0.f;
     const bool bPalette=PixelPalette!=P.PixelPalette || PixelDepthGrade!=Grade;
     const bool bVisibility=bPixelBackgroundActive!=bEnabled || PixelPlanCount!=P.PixelPlanCount;
     if(!bRepaint && !bPalette && !bVisibility && !bRawChanged)return;
     bPixelRawPalette=bRaw;
+    bPixelReadability=bNew;
     bPixelBackgroundActive=bEnabled;PixelPlanCount=P.PixelPlanCount;PixelPalette=P.PixelPalette;PixelDepthGrade=Grade;
     PixelCellCm=P.PixelCellCm;PixelStructureScale=P.PixelStructureScale;PixelDensity=P.PixelDensity;
     PixelRoughness=P.PixelRoughness;PixelErosion=P.PixelErosion;PixelDetail=P.PixelDetail;

@@ -32,7 +32,8 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bIsolation=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditLegacy"));
     static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
     static const bool bPixelVisibilityQA=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelVisibilityQA"));
-    static const bool bPixelQA=bPixelVisibilityQA || FParse::Param(FCommandLine::Get(),TEXT("PWGPixel2DQA"));
+    static const bool bPixelReadabilityQA=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelReadabilityQA"));
+    static const bool bPixelQA=bPixelReadabilityQA || bPixelVisibilityQA || FParse::Param(FCommandLine::Get(),TEXT("PWGPixel2DQA"));
     static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
     static const bool bCaveQA=FParse::Param(FCommandLine::Get(),TEXT("PWGCaveReferenceQA"));
     if (!bRequested || VisualProbeStep<0 || !GetWorld()->IsGameWorld()) return;
@@ -47,7 +48,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         UE_LOG(LogTemp,Error,TEXT("VF_RENDER_FAIL %s"),Why);
         VisualProbeStep=-1; FPlatformMisc::RequestExit(false);
     };
-    if(G->WorldName!=(bPixelVisibilityQA?TEXT("VF_PixelVisibility_20261128"):bPixelQA?TEXT("VF_Pixel2D_20261126"):bCaveQA?TEXT("VF_CaveReference_20261126"):bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
+    if(G->WorldName!=(bPixelReadabilityQA?TEXT("VF_PixelReadability_20261128"):bPixelVisibilityQA?TEXT("VF_PixelVisibility_20261128"):bPixelQA?TEXT("VF_Pixel2D_20261126"):bCaveQA?TEXT("VF_CaveReference_20261126"):bDepthQA?TEXT("VF_DepthProbe_20261126"):TEXT("VF_POIProbe_20261126"))) {Fail(TEXT("wrong sandbox slot"));return;}
     auto* Mover=Pawn->FindComponentByClass<UMoverComponent>();
     auto* Input=Pawn->FindComponentByClass<UPWGSidescrollerInputComponent>();
     auto FreezePawn=[&](bool bFreeze)
@@ -83,7 +84,9 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         bVisualProbeDisableMaskPass=false;
         PC->ConsoleCommand(TEXT("t.MaxFPS 60"));
         G->SetBackgroundAuditIsolation(0);
-        if(bPixelVisibilityQA)
+        if(bPixelReadabilityQA)
+            VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?8:9;
+        else if(bPixelVisibilityQA)
             VisualProbeScene=VisualProbeScene==0?8:9;
         else if(bPixelQA)
             VisualProbeScene=VisualProbeScene==0?1:VisualProbeScene==1?2:VisualProbeScene==2?8:9;
@@ -157,12 +160,14 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             (!StylizedDepthMaterial || ActiveDepthMaterial!=StylizedDepthMaterial || ProfileMix<.999f))
         {Fail(TEXT("semantic material not active"));return false;}
         if(bPixelQA && (!bHasPixelBackgroundAsset || !G->IsPixelBackgroundActive())){Fail(TEXT("global Pixel2D not active"));return false;}
-        if(bPixelVisibilityQA && G->IsPixelRawPaletteActive()!=VisualProfile.bPixelRawPalette){Fail(TEXT("Raw Palette toggle mismatch"));return false;}
+        if(bPixelReadabilityQA && (!G->HasPixelReadabilityMaterial() || G->IsPixelReadabilityActive()!=VisualProfile.bPixelReadability))
+        {Fail(TEXT("Readability A/B material mismatch"));return false;}
+        if((bPixelReadabilityQA || bPixelVisibilityQA) && G->IsPixelRawPaletteActive()!=VisualProfile.bPixelRawPalette){Fail(TEXT("Raw Palette toggle mismatch"));return false;}
         if(bDepthQA && !bHasDepthPrototypeAsset){Fail(TEXT("Depth prototype asset not loaded"));return false;}
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelReadabilityQA?TEXT("ChatGPT/PixelReadability_20261128/Render"):bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -173,7 +178,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         }
         UE_LOG(LogTemp,Display,TEXT("VF_RENDER_CAPTURE %s camera=%s rotation=%s width=%.3f pawn=%s layer=%d lights=%s"),
             *Name,*P.ToCompactString(),*R.ToCompactString(),W,*Pawn->GetActorLocation().ToCompactString(),G->LayerAt(Pawn->GetActorLocation()),*Lights);
-        if(bPixelVisibilityQA)
+        if(bPixelReadabilityQA || bPixelVisibilityQA)
         {
             const auto* Fill=CameraFillLight.Get();
             if(Fill) UE_LOG(LogTemp,Display,TEXT("PIXEL_FILL capture=%s lux=%.3f visible=%d forward=%s channels=%d%d%d raw=%d strength=%.2f"),*Name,Fill->Intensity,Fill->IsVisible(),*Fill->GetForwardVector().ToCompactString(),Fill->LightingChannels.bChannel0,Fill->LightingChannels.bChannel1,Fill->LightingChannels.bChannel2,G->IsPixelRawPaletteActive(),VisualProfile.Strength);
@@ -182,7 +187,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
                 const auto& PP=PC->PlayerCameraManager->GetCameraCacheView().PostProcessSettings;
                 UE_LOG(LogTemp,Display,TEXT("PIXEL_CAMERA_PP capture=%s method=%d bias=%.3f min=%.3f max=%.3f manual_raw_override=%d"),*Name,int32(PP.AutoExposureMethod),PP.AutoExposureBias,PP.AutoExposureMinBrightness,PP.AutoExposureMaxBrightness,DepthPostProcess->Settings.bOverride_AutoExposureMethod);
             }
-            if(VisualProfile.bPixelRawPalette || FCString::Strcmp(Suffix,TEXT("Atmospheric"))==0)
+            if(bPixelReadabilityQA || VisualProfile.bPixelRawPalette || FCString::Strcmp(Suffix,TEXT("Atmospheric"))==0)
             {
                 G->LogPixelVisibilityAudit(VisualProbeFocus);
                 G->DebugVisualCoverage(FTransform(R,P),W,H);
@@ -257,6 +262,12 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             {
                 if(G->IsPixelBackgroundActive()){Fail(TEXT("Stage 1 toggle failed"));return;}
                 SetPreset(1);
+                if(bPixelReadabilityQA)
+                {
+                    VisualProfile.bPixelReadability=false;
+                    RefreshVisualProfile();
+                    Advance(80);return;
+                }
                 if(bPixelVisibilityQA)
                 {
                     VisualProfile.bPixelRawPalette=true;
@@ -328,6 +339,19 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         }
         case 13: if(!Capture(TEXT("TorchDark")))return;if(bPixelQA){Advance(70);return;}break;
         case 70: NextScene();return;
+        case 80:
+            if(!Capture(TEXT("Before")))return;
+            VisualProfile.bPixelReadability=true;RefreshVisualProfile();Advance(81);return;
+        case 81:
+            if(!Capture(TEXT("After")))return;
+            if(VisualProbeScene!=0){Advance(70);return;}
+            VisualProfile.bPixelRawPalette=true;RefreshVisualProfile();Advance(82);return;
+        case 82:
+            if(!Capture(TEXT("RawPalette")))return;
+            VisualProfile.bPixelRawPalette=false;VisualProfile.bVisualizeDepthLayers=true;RefreshVisualProfile();Advance(83);return;
+        case 83:
+            if(!Capture(TEXT("Plans")))return;
+            SetPreset(0);Advance(8);return;
         // Exact same camera/seed/masks for raw, ambient sweep and dark/torch.
         case 71:
             if(!Capture(TEXT("RawPalette")))return;

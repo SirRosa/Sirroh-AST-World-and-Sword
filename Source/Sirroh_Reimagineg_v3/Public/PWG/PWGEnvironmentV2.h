@@ -217,6 +217,9 @@ struct FPWGVisualProfile
     // Art review only: same palette, mask, UV and depth, no physical lighting.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(DisplayName="Raw Palette / Art Preview"))
     bool bPixelRawPalette=false;
+    // A/B against accepted b063520: identical masks, different paint and albedo.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(DisplayName="Surface Readability / Stage 2"))
+    bool bPixelReadability=true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0",ClampMax="3"))
     int32 PixelPlanCount=3;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Procedural Pixel 2D",meta=(ClampMin="0.5",ClampMax="2.5"))

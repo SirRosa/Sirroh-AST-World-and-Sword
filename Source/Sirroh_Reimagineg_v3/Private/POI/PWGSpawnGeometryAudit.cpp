@@ -139,7 +139,7 @@ bool FPWGSpawnGeometryAudit::RunTest(const FString&)
                     }
                     else if (const auto* PixelBatch=G->DecorationChunks.Find(Pair.Key); PixelBatch && PixelBatch->PixelPlans.Contains(S))
                     {
-                        TestTrue(TEXT("Pixel2D background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_PWGv2_PixelBackground")));
+                        TestTrue(TEXT("Pixel2D background is Default Lit"),(IsLit(M->GetMaterial(S),TEXT("M_PWGv2_PixelBackground")) || IsLit(M->GetMaterial(S),TEXT("M_PWGv2_PixelBackground_Readability"))));
                         TestFalse(TEXT("Pixel2D background has no collision"),Part->bEnableCollision);
                     }
                     else if (S>=G->SolidCutawaySectionBase+4) { ++LitProjected; TestTrue(TEXT("Projected POI background is Default Lit"),IsLit(M->GetMaterial(S),TEXT("M_KitImageFit_LitBackground"))); }
