@@ -12,7 +12,7 @@ Instrukcja dla każdego nowego agenta pracującego nad projektem. Najpierw przec
 
 ## 2. Dostęp i podstawowy workflow
 
-Kolejność pracy: **Google Drive → GitHub → MCPENROUZ**.
+Podstawowy workflow: **ReMCP (lokalny komputer i Unreal Engine) + GitHub (kod, wersjonowanie, Actions)**. Google Drive pozostaje źródłem synchronizacji, assetów i backupów; MCPENROUZ jest wyłącznie narzędziem awaryjnym (fallback).
 
 | Zasób | Lokalizacja |
 |---|---|
@@ -24,26 +24,38 @@ Kolejność pracy: **Google Drive → GitHub → MCPENROUZ**.
 | Moduł C++ | Source/Sirroh_Reimagineg_v3 |
 | Dokumentacja i narzędzia | Source/Docs, Source/Tools |
 
-Użytkownik udostępnił konektory GitHub (w tym GitHub Actions), Google Drive i MCPENROUZ. Najpierw odkryj dostępne narzędzia i ich rzeczywiste schematy; nie zakładaj braku dostępu. Jeżeli po sprawdzeniu występuje błąd połączenia lub uprawnień, podaj konkretny błąd.
+Użytkownik udostępnił konektory ReMCP, GitHub (w tym GitHub Actions), Google Drive i MCPENROUZ. Najpierw odkryj dostępne narzędzia i ich rzeczywiste schematy; nie zakładaj braku dostępu. Jeżeli po sprawdzeniu występuje błąd połączenia lub uprawnień, podaj konkretny błąd.
 
-1. Odczytuj aktualny kod z GitHuba; pełny snapshot Source został zapisany w commicie 41f1c8f. Google Drive jest źródłem plików projektu, assetów, aktualizacji lokalnych oraz logów. GitHub jest roboczą kopią kodu, nie automatycznie aktualnym odbiciem dysku. Przed zmianą sprawdź rozbieżności i SHA.
-2. Jeśli potrzebnego pliku nie ma w repo lub jest nieaktualny, odczytaj/skopiuj go z Drive do GitHuba (z zachowaniem ścieżki i oryginału). Nie zużywaj MCP na przeglądanie każdego CPP. Używaj odczytu zakresów linii, drzewa Git i dokumentacji. Przy pobieraniu plików przez konektor sprawdź także zwrócone załączniki/plik roboczy, jeśli tekst odpowiedzi jest pusty.
-3. Wykonuj właściwą pracę na GitHubie, po backupie. Przy wielu plikach preferuj jeden spójny commit (blob/tree/commit/ref lub odpowiedni dostępny mechanizm). Weryfikuj diff i faktyczny SHA. Actions mogą służyć do automatyzacji/testów dostępnych na runnerze; nie są zamiennikiem lokalnej kompilacji z właściwym UE.
-4. Prześlij na komputer tylko zmienione pliki, najlepiej z URL przypiętych do pełnego SHA commita. Skrypt przed zapisem weryfikuje wszystkie stare i nowe hashe (git hash-object --no-filters), pobiera wszystkie pliki do stagingu, tworzy lokalne kopie, dopiero potem wdraża całość. Przy rozbieżności przerwij, zachowaj zmiany użytkownika i ustal różnicę. Zachowaj kodowanie/CRLF, nie nadpisuj całego Source.
-5. Kompiluj lokalnie przez MCPENROUZ, wykonuj adekwatne testy, odczytuj logi i poprawiaj rzeczywiste błędy. Nie deklaruj zakończonej implementacji bez sprawdzenia wdrożenia/kompilacji. Test headless nie zastępuje testu wizualnego.
+1. Odczytuj aktualny kod lokalnie przez ReMCP lub z GitHuba, zależnie od zadania; pełny snapshot Source został zapisany w commicie 41f1c8f. Lokalny projekt jest źródłem faktycznego stanu wdrożenia. Google Drive przechowuje synchronizowane pliki projektu, assety, backupy oraz logi. GitHub jest wersjonowaną kopią kodu, nie automatycznie aktualnym odbiciem dysku. Przed zmianą sprawdź rozbieżności i SHA.
+2. Jeśli potrzebnego pliku nie ma w repo lub jest nieaktualny, odczytaj go przede wszystkim lokalnie przez ReMCP, ewentualnie z Drive; zabezpiecz oryginał na GitHubie przed zmianą kodu. Używaj odczytu zakresów linii, zbiorczych odczytów, drzewa Git i dokumentacji. Przy pobieraniu plików przez konektor sprawdź także zwrócone załączniki/plik roboczy, jeśli tekst odpowiedzi jest pusty.
+3. Wykonuj właściwą pracę na GitHubie lub lokalnie przez ReMCP, po backupie. Każdą zmianę kodu zapisz w rzeczywistym commicie na GitHubie, zachowując zgodność wersji lokalnej i repo. Przy wielu plikach preferuj jeden spójny commit (blob/tree/commit/ref lub odpowiedni dostępny mechanizm). Weryfikuj diff i faktyczny SHA. Actions mogą służyć do automatyzacji/testów dostępnych na runnerze; nie są zamiennikiem lokalnej kompilacji z właściwym UE.
+4. Przy wdrażaniu zmian z GitHuba przez ReMCP prześlij na komputer tylko zmienione pliki, najlepiej z URL przypiętych do pełnego SHA commita. Przy zmianach wykonanych lokalnie zweryfikuj zgodność z commitem bez zbędnego ponownego wdrażania. Skrypt przed zapisem weryfikuje wszystkie stare i nowe hashe (git hash-object --no-filters), pobiera wszystkie pliki do stagingu, tworzy lokalne kopie, dopiero potem wdraża całość. Przy rozbieżności przerwij, zachowaj zmiany użytkownika i ustal różnicę. Zachowaj kodowanie/CRLF, nie nadpisuj całego Source.
+5. Kompiluj lokalnie przez ReMCP, wykonuj adekwatne testy, odczytuj logi i poprawiaj rzeczywiste błędy. Do weryfikacji wizualnej używaj ReMCP do odczytu rzeczywistych renderów, zrzutów ekranu i (jeśli potrzebne) obsługi edytora. Nie deklaruj zakończonej implementacji bez sprawdzenia wdrożenia/kompilacji. Test headless nie zastępuje testu wizualnego.
 6. Repo zawiera przede wszystkim kod. Nie wrzucaj całego wielogigabajtowego projektu, binariów, sekretów, licencjonowanych assetów czy zapisów na publiczny GitHub. Duże pliki i binarne backupy trzymaj w synchronizowanym projekcie; Git LFS tylko kiedy rzeczywiście potrzebny.
 
 Pracuj w bieżącym chacie z dostępnymi narzędziami. Nie przenoś samowolnie pracy do Codex/Work. Repo i pliki powyżej dotyczą World & Sword; inne repozytoria AST nie są domyślnym celem zmian.
 
-## 3. MCPENROUZ — minimalizuj zużycie
+## 3. ReMCP — podstawowy dostęp lokalny; MCPENROUZ — fallback
+
+### ReMCP (domyślnie)
+
+- Na początku pracy odkryj aktualne narzędzia ReMCP i wywołaj `list_devices`, aby sprawdzić dostępność właściwego komputera. Używaj identyfikatora zwróconego w bieżącej sesji, nie zakładaj stałej dostępności urządzenia.
+- ReMCP służy do odczytu i edycji plików, PowerShell/Python, wdrażania, kompilacji, testów, analizy logów, odczytu obrazów i zrzutów ekranu oraz obsługi Unreal Editor. Nie przenoś tych operacji do MCPENROUZ, jeśli ReMCP działa.
+- Zweryfikowane 28.11.2026: komputer Windows x64 (3vPh0R14), klient 0.2.273, 79 lokalnych narzędzi, wykonanie polecenia PowerShell z kodem 0, utworzenie i sprawdzenie pliku na pulpicie oraz rzeczywisty odczyt i analiza dwóch PNG. Kompilacja Unreal i sterowanie edytorem nie były jeszcze sprawdzone w tym teście.
+- Konfiguracja serwera (`get_configuration`) nie wykazała limitu godzinowego, dziennego ani miesięcznego; brak jednak gwarancji nielimitowanego dostępu. Odczytany timeout RPC: 120 s, maksymalnie 32 oczekujące operacje na urządzenie. Nie traktuj tych wartości jako niezmiennych; sprawdzaj konfigurację przy problemach.
+- Długie kompilacje uruchamiaj przez `start_process`, zachowaj zwrócony PID sesji i monitoruj `read_process_output` lub `wait_for_process_output`; nie uruchamiaj kolejnego buildu tylko dlatego, że pierwszy nie zwrócił jeszcze wyniku. Zapisuj trwałe logi i końcowy exit code; weryfikuj rezultat testów, nie tylko kod procesu.
+- Do oglądania renderów używaj `read_image`; jeżeli konektor zwraca jedynie metadane bez obrazu, użyj `read_binary` do odczytu i zdekodowania danych PNG. Do operacji seryjnych preferuj zbiorcze odczyty oraz spójne skrypty.
+- Jeżeli ReMCP jest niedostępny, odmawia wykonania operacji lub nie obsługuje potrzebnej funkcji, sprawdź konkretny błąd i stan urządzenia. Jeśli bezpieczna kontynuacja jest niemożliwa, przejdź do MCPENROUZ. Przed ponowieniem sprawdź, czy poprzednia operacja faktycznie nie działa nadal; nie obchodź ograniczeń uprawnień.
+
+### MCPENROUZ (wyłącznie awaryjnie) — minimalizuj zużycie
 
 Zasada rozliczania (oryginalny komunikat):
 > Only accepted device jobs count as API calls, including reading files and device data. Listing devices and checking an existing operation do not use API calls. Additional packs do not bypass account restrictions.
 
 - Limit jest realny i zależny od konta. W poprzednich sesjach dostępny budżet bywał ograniczony do około 10 calli. Nie zakładaj, że jest to stała aktualna liczba; sprawdzaj dostępny budżet, jeśli narzędzia go podają.
 - Listowanie urządzeń i sprawdzanie istniejącej operacji (operation_status, z właściwym operation_id) nie zużywa calli zgodnie z komunikatem. Nie utożsamiaj operation_id z session_id procesu. Odczyt process_output nie musi być rozliczany tak samo — nie spamuj nim.
-- Gdy MCP jest jedyną opcją, przygotuj **jeden zbiorczy skrypt PowerShell/Python**: preflight, kontrola hashy, staging, backup, wdrożenie, kompilacja, testy i wynik. Nie wykonuj osobnych wywołań dla każdego pliku, katalogu czy polecenia. Nie przekraczaj limitów długości polecenia; dłuższe skrypty umieszczaj w repo.
-- Skrypt zapisuje logi i jednoznaczne statusy w projekcie, np. Saved/ChatGPT/<NazwaZadania>/{result.txt,build.log,test.log}. Google Drive synchronizuje te pliki; odczytuj je konektorem Drive bez MCP. Używaj unikalnych nazw, sprawdzaj daty i aktualność logów. Synchronizacja może być opóźniona.
+- Gdy MCPENROUZ jest jedyną dostępną opcją, przygotuj **jeden zbiorczy skrypt PowerShell/Python**: preflight, kontrola hashy, staging, backup, wdrożenie, kompilacja, testy i wynik. Nie wykonuj osobnych wywołań dla każdego pliku, katalogu czy polecenia. Nie przekraczaj limitów długości polecenia; dłuższe skrypty umieszczaj w repo.
+- Skrypt zapisuje logi i jednoznaczne statusy w projekcie, np. Saved/ChatGPT/<NazwaZadania>/{result.txt,build.log,test.log}. Google Drive synchronizuje te pliki; odczytuj je przez ReMCP, jeśli jest dostępny, lub konektorem Drive bez zużywania calli MCPENROUZ. Używaj unikalnych nazw, sprawdzaj daty i aktualność logów. Synchronizacja może być opóźniona.
 - Przy trwającej kompilacji sprawdzaj istniejącą operację lub zsynchronizowane logi zamiast uruchamiać nowe zadania. Brak aktualizacji logu nie oznacza zakończenia procesu. Weryfikuj końcowy exit code i treść logu. Nie zgaduj wyniku.
 - Poprzedni identyfikator urządzenia nie jest trwałą gwarancją dostępności. Przy rozłączeniu sprawdź listę urządzeń; nie marnuj calli na wielokrotne ponawianie błędnych zleceń.
 - Nie uruchamiaj kompilacji z otwartym Unreal Editor ani nie zamykaj użytkownikowi gry/edytora bez uzgodnienia. Jeśli pliki są zablokowane, raportuj blokadę; nie zabijaj procesów na ślepo.
@@ -116,7 +128,7 @@ Ostatni SpawnGeometryAudit przeszedł dla świata asd i dwóch nowych seedów (8
 
 Użytkownik oczekuje pracy, nie wielokrotnego opisywania planu ani meldunków o nieukończonych etapach. Ogranicz komunikaty do niezbędnego minimum. Nie pytaj o informacje, które już są w repo, Drive lub w poleceniu. Nie zgaduj i nie przedstawiaj hipotezy jako potwierdzonego faktu.
 
-Zadanie jest gotowe do testów użytkownika dopiero po zapisaniu zweryfikowanego commita, wdrożeniu właściwych plików, udanej kompilacji i adekwatnych dostępnych testach. Gdy coś blokuje pracę, podaj dokładną przyczynę, co zostało wykonane i co nie jest zweryfikowane. Nie deklaruj, że efekt wizualny działa, jeśli sprawdzono jedynie testy headless.
+Zadanie zmieniające grę jest gotowe do testów użytkownika dopiero po zapisaniu zweryfikowanego commita, wdrożeniu właściwych plików, udanej kompilacji i adekwatnych dostępnych testach. Przy zmianach wyłącznie dokumentacyjnych wystarczy zweryfikowany commit i kontrola diffu. Gdy coś blokuje pracę, podaj dokładną przyczynę, co zostało wykonane i co nie jest zweryfikowane. Nie deklaruj, że efekt wizualny działa, jeśli sprawdzono jedynie testy headless.
 
 - W każdym raporcie końcowym jednoznacznie napisz, czy do testowania zmian trzeba utworzyć nowy świat, czy wystarczy wczytać istniejący zapis (oraz czy konieczny jest restart gry). Jeśli nie masz pewności, zaznacz to.
 - Na bieżąco aktualizuj AGENTS.md o trwałe, użyteczne ustalenia, powtarzalne problemy i zweryfikowane rozwiązania. Nie zapisuj przejściowych logów, drobnych iteracji ani redundantnych informacji; dokument ma pozostać zwięzłą instrukcją, nie kroniką rozmów.
