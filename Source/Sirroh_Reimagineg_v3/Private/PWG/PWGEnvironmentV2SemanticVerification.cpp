@@ -33,6 +33,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
     static const bool bEnclosed=FParse::Param(FCommandLine::Get(),TEXT("PWGBackgroundAuditEnclosed"));
     static const bool bPixelVisibilityQA=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelVisibilityQA"));
     static const bool bPixelReadabilityQA=FParse::Param(FCommandLine::Get(),TEXT("PWGPixelReadabilityQA"));
+    static const bool bPixelReadabilityAfterOnly=bPixelReadabilityQA && FParse::Param(FCommandLine::Get(),TEXT("PWGPixelReadabilityAfterOnly"));
     static const bool bPixelQA=bPixelReadabilityQA || bPixelVisibilityQA || FParse::Param(FCommandLine::Get(),TEXT("PWGPixel2DQA"));
     static const bool bDepthQA=FParse::Param(FCommandLine::Get(),TEXT("PWGDepthLayersQA"));
     static const bool bCaveQA=FParse::Param(FCommandLine::Get(),TEXT("PWGCaveReferenceQA"));
@@ -167,7 +168,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
         if(bCaveQA && (!bHasIndependentCaveAsset || G->IsCaveReferenceActive()==VisualProfile.bCompareStage1)){Fail(TEXT("Cave reference A/B state mismatch"));return false;}
         if(bDepthQA && !bCaveQA && G->IsDepthPrototypeActive()==VisualProfile.bCompareStage1){Fail(TEXT("Depth prototype A/B state mismatch"));return false;}
         const FString Name=VisualProbeLabel+TEXT("_")+Suffix;
-        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelReadabilityQA?TEXT("ChatGPT/PixelReadability_20261128/RenderVerified"):bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
+        const FString Folder=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/(bPixelReadabilityQA?(bPixelReadabilityAfterOnly?TEXT("ChatGPT/PixelReadability_20261128/RenderTuned"):TEXT("ChatGPT/PixelReadability_20261128/RenderVerified")):bPixelVisibilityQA?TEXT("ChatGPT/PixelVisibility_20261128/RenderCorrected"):bPixelQA?TEXT("ChatGPT/ProceduralPixel2D_20261126/Render"):bCaveQA?(bGeoQA?TEXT("ChatGPT/GeologicalCave_20261126/Render"):TEXT("ChatGPT/StratifiedCave_20261126/RenderTexturedAmbient")):bDepthQA?(bEnclosed?TEXT("ChatGPT/DepthLayersPrototype_20261126/Enclosed"):TEXT("ChatGPT/DepthLayersPrototype_20261126/Render")):bIsolation?TEXT("ChatGPT/UnifiedBackground_20261126/Audit"):bEnclosed?TEXT("ChatGPT/UnifiedBackground_20261126/Enclosed"):TEXT("ChatGPT/UnifiedBackground_20261126/Render")));
         IFileManager::Get().MakeDirectory(*Folder,true);
         FString Lights;
         for(TActorIterator<AActor> It(GetWorld());It;++It)
@@ -264,6 +265,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
                 SetPreset(1);
                 if(bPixelReadabilityQA)
                 {
+                    if(bPixelReadabilityAfterOnly){Advance(81);return;}
                     VisualProfile.bPixelReadability=false;
                     RefreshVisualProfile();
                     Advance(80);return;
@@ -354,7 +356,7 @@ void APWGEnvironmentV2::VerifySemanticVisuals()
             VisualProfile.bPixelRawPalette=true;RefreshVisualProfile();Advance(82);return;
         case 82:
             if(!Capture(TEXT("RawPalette")))return;
-            Advance(86);return;
+            Advance(bPixelReadabilityAfterOnly?70:86);return;
         case 86:
             VisualProfile.bPixelRawPalette=false;VisualProfile.bVisualizeDepthLayers=true;RefreshVisualProfile();Advance(83);return;
         case 83:

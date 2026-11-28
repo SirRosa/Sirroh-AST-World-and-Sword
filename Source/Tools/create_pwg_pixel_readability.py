@@ -47,25 +47,29 @@ if(Readability>0.5)
     // Material family is hue; plan is an independent luminance budget.
     // All values are finite physical Base Color, never emissive light.
     bool isDeep=Choice>1.5 || (Choice<.5 && Data.g>.5);
-    float3 family=isDeep?float3(.74,.93,1.26):float3(1.13,1.05,.78);
+    float3 family=isDeep?float3(.43,.78,1.58):float3(1.08,1.18,.48);
     float b=Data.b*2.0-1.0;
-    family*=float3(1.0+.095*b,1.0-.025*b,1.0-.13*b);
+    family*=float3(1.0+.15*b,1.0-.045*b,1.0-.20*b);
     float3 hue=family;
+    // Keep a material's body recognizable; shadowed material is cooler and
+    // raised material warmer, but both retain the same luminance band.
+    if(i==2)hue*=float3(.89,.99,1.12);
+    if(i==4)hue*=float3(1.12,1.02,.86);
     if(i==5)hue=isDeep?float3(.56,1.10,1.12):float3(.70,1.13,.91);
     if(i==6)hue=isDeep?float3(1.22,.84,.83):float3(1.32,.93,.58);
     if(i==7)hue=isDeep?float3(1.06,.83,1.29):float3(1.12,.84,1.18);
     // Non-overlapping plan tonal bands at Grade=1, with narrowing contrast.
-    float nearT[8]={.012,.022,.032,.044,.058,.043,.052,.039};
-    float midT[8]={.066,.072,.077,.088,.100,.086,.090,.085};
+    float nearT[8]={.015,.026,.038,.053,.070,.050,.060,.047};
+    float midT[8]={.074,.078,.082,.093,.106,.091,.096,.090};
     float farT[8]={.112,.117,.123,.131,.142,.131,.131,.131};
-    float endT[8]={.152,.152,.153,.161,.169,.161,.161,.161};
+    float endT[8]={.151,.151,.151,.161,.176,.161,.161,.161};
     int p=clamp((int)round(Plan),0,3);
     float T=p==0?nearT[i]:p==1?midT[i]:p==2?farT[i]:endT[i];
     float q=saturate(Grade);
     T=lerp(nearT[i],T,q)*(isDeep?.88:1.);
     float3 weights=float3(.2126,.7152,.0722);
     hue/=max(dot(hue,weights),.01);
-    float sat=p==0?1.:p==1?.68:p==2?.40:.22;
+    float sat=p==0?1.:p==1?.83:p==2?.65:.47;
     hue=lerp(float3(1,1,1),hue,lerp(1.,sat,q));
     return saturate(hue*T);
 }

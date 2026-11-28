@@ -1,0 +1,102 @@
+"""Calibrate only the accepted readability experiment's Base Color custom graph.
+The deployment must back up the material and verify its original SHA first."""
+import unreal
+ea=unreal.EditorAssetLibrary
+me=unreal.MaterialEditingLibrary
+path='/Game/Systems/Procedural_World_Generator/PWG_v2/M_PWGv2_PixelBackground_Readability'
+mat=unreal.load_asset(path)
+assert mat and mat.get_editor_property('blend_mode')==unreal.BlendMode.BLEND_MASKED
+assert mat.get_editor_property('shading_model')==unreal.MaterialShadingModel.MSM_DEFAULT_LIT
+node=me.get_material_property_input_node(mat,unreal.MaterialProperty.MP_BASE_COLOR)
+assert isinstance(node,unreal.MaterialExpressionCustom)
+old=r'''
+// R = byte index (0..7); G = family; A = actual mask. No colour noise here.
+// All palette values are authored numeric linear RGB, not source images.
+int i=clamp((int)round(Data.r*255.0/36.0),0,7);
+if(Readability>0.5)
+{
+    // Material family is hue; plan is an independent luminance budget.
+    // All values are finite physical Base Color, never emissive light.
+    bool isDeep=Choice>1.5 || (Choice<.5 && Data.g>.5);
+    float3 family=isDeep?float3(.74,.93,1.26):float3(1.13,1.05,.78);
+    float b=Data.b*2.0-1.0;
+    family*=float3(1.0+.095*b,1.0-.025*b,1.0-.13*b);
+    float3 hue=family;
+    if(i==5)hue=isDeep?float3(.56,1.10,1.12):float3(.70,1.13,.91);
+    if(i==6)hue=isDeep?float3(1.22,.84,.83):float3(1.32,.93,.58);
+    if(i==7)hue=isDeep?float3(1.06,.83,1.29):float3(1.12,.84,1.18);
+    // Non-overlapping plan tonal bands at Grade=1, with narrowing contrast.
+    float nearT[8]={.012,.022,.032,.044,.058,.043,.052,.039};
+    float midT[8]={.066,.072,.077,.088,.100,.086,.090,.085};
+    float farT[8]={.112,.117,.123,.131,.142,.131,.131,.131};
+    float endT[8]={.152,.152,.153,.161,.169,.161,.161,.161};
+    int p=clamp((int)round(Plan),0,3);
+    float T=p==0?nearT[i]:p==1?midT[i]:p==2?farT[i]:endT[i];
+    float q=saturate(Grade);
+    T=lerp(nearT[i],T,q)*(isDeep?.88:1.);
+    float3 weights=float3(.2126,.7152,.0722);
+    hue/=max(dot(hue,weights),.01);
+    float sat=p==0?1.:p==1?.68:p==2?.40:.22;
+    hue=lerp(float3(1,1,1),hue,lerp(1.,sat,q));
+    return saturate(hue*T);
+}
+float3 shallow[8]={float3(.025,.027,.020),float3(.056,.061,.041),float3(.105,.128,.081),float3(.165,.185,.115),float3(.255,.238,.142),float3(.085,.166,.146),float3(.30,.175,.067),float3(.092,.061,.10)};
+float3 deep[8]={float3(.015,.020,.034),float3(.034,.046,.078),float3(.066,.092,.146),float3(.117,.148,.22),float3(.19,.235,.32),float3(.053,.151,.164),float3(.23,.105,.13),float3(.082,.051,.118)};
+bool d=Choice>1.5 || (Choice<.5 && Data.g>.5);
+float3 c=d?deep[i]:shallow[i];
+float3 base=d?deep[2]:shallow[2];
+float q=saturate(Plan/3);
+c=lerp(c,base,q*.28*saturate(Grade));
+return c*lerp(1.0,.76,q*saturate(Grade));
+'''
+new=r'''
+// R = byte index (0..7); G = family; A = actual mask. No colour noise here.
+// All palette values are authored numeric linear RGB, not source images.
+int i=clamp((int)round(Data.r*255.0/36.0),0,7);
+if(Readability>0.5)
+{
+    // Material family is hue; plan is an independent luminance budget.
+    // All values are finite physical Base Color, never emissive light.
+    bool isDeep=Choice>1.5 || (Choice<.5 && Data.g>.5);
+    float3 family=isDeep?float3(.43,.78,1.58):float3(1.08,1.18,.48);
+    float b=Data.b*2.0-1.0;
+    family*=float3(1.0+.15*b,1.0-.045*b,1.0-.20*b);
+    float3 hue=family;
+    // Keep a material's body recognizable; shadowed material is cooler and
+    // raised material warmer, but both retain the same luminance band.
+    if(i==2)hue*=float3(.89,.99,1.12);
+    if(i==4)hue*=float3(1.12,1.02,.86);
+    if(i==5)hue=isDeep?float3(.56,1.10,1.12):float3(.70,1.13,.91);
+    if(i==6)hue=isDeep?float3(1.22,.84,.83):float3(1.32,.93,.58);
+    if(i==7)hue=isDeep?float3(1.06,.83,1.29):float3(1.12,.84,1.18);
+    // Non-overlapping plan tonal bands at Grade=1, with narrowing contrast.
+    float nearT[8]={.015,.026,.038,.053,.070,.050,.060,.047};
+    float midT[8]={.074,.078,.082,.093,.106,.091,.096,.090};
+    float farT[8]={.112,.117,.123,.131,.142,.131,.131,.131};
+    float endT[8]={.151,.151,.151,.161,.176,.161,.161,.161};
+    int p=clamp((int)round(Plan),0,3);
+    float T=p==0?nearT[i]:p==1?midT[i]:p==2?farT[i]:endT[i];
+    float q=saturate(Grade);
+    T=lerp(nearT[i],T,q)*(isDeep?.88:1.);
+    float3 weights=float3(.2126,.7152,.0722);
+    hue/=max(dot(hue,weights),.01);
+    float sat=p==0?1.:p==1?.83:p==2?.65:.47;
+    hue=lerp(float3(1,1,1),hue,lerp(1.,sat,q));
+    return saturate(hue*T);
+}
+float3 shallow[8]={float3(.025,.027,.020),float3(.056,.061,.041),float3(.105,.128,.081),float3(.165,.185,.115),float3(.255,.238,.142),float3(.085,.166,.146),float3(.30,.175,.067),float3(.092,.061,.10)};
+float3 deep[8]={float3(.015,.020,.034),float3(.034,.046,.078),float3(.066,.092,.146),float3(.117,.148,.22),float3(.19,.235,.32),float3(.053,.151,.164),float3(.23,.105,.13),float3(.082,.051,.118)};
+bool d=Choice>1.5 || (Choice<.5 && Data.g>.5);
+float3 c=d?deep[i]:shallow[i];
+float3 base=d?deep[2]:shallow[2];
+float q=saturate(Plan/3);
+c=lerp(c,base,q*.28*saturate(Grade));
+return c*lerp(1.0,.76,q*saturate(Grade));
+'''
+normalize=lambda s:s.replace('\r\n','\n').strip()
+assert normalize(node.get_editor_property('code'))==normalize(old),'Unexpected material graph; do not overwrite'
+node.set_editor_property('code',new)
+me.recompile_material(mat)
+assert normalize(node.get_editor_property('code'))==normalize(new)
+assert ea.save_loaded_asset(mat,only_if_is_dirty=False)
+unreal.log('PIXEL_READABILITY_PALETTE_TUNED '+mat.get_path_name())
